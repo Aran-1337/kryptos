@@ -50,6 +50,7 @@ export default function AdminCodesPage() {
       }
     } catch {}
   }, []);
+  const [codeValue, setCodeValue] = useState('350');
   const [codeCount, setCodeCount] = useState('5');
 
   const handleGenerateCodes = (e: React.FormEvent) => {
