@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Users, Users2, BookOpen, KeyRound, Settings, LogOut, Menu, X, CreditCard, FileCheck2, Video, Wallet, LineChart, LayoutTemplate, Tag, Trophy, MessageSquare, Truck, Star, Flame } from 'lucide-react';
+import { BarChart3, Users, Users2, BookOpen, KeyRound, Settings, LogOut, Menu, X, CreditCard, FileCheck2, Video, Wallet, LineChart, LayoutTemplate, Tag, Trophy, MessageSquare, Truck, Star, Flame, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ThemeToggle from '../components/ThemeToggle';
 import NotificationCenter from '../components/NotificationCenter';
@@ -54,6 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -90,10 +91,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     try {
       await fetch('http://localhost:5000/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {}
-    // Clear cookie and local storage
     document.cookie = 'admin_token=; path=/; max-age=0';
     localStorage.removeItem('admin_user');
     window.location.href = '/admin/login';
+  };
+
+  const toggleSection = (title: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [title]: !prev[title]
+    }));
   };
 
   const SidebarContent = () => (
@@ -105,149 +112,155 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </Link>
       </div>
 
-      {/* Categorized Menu Sections */}
-      <div style={{ padding: '16px 16px', flex: 1, overflowY: 'auto' }}>
-        {adminSidebarSections.map((section, sIdx) => (
-          <div key={sIdx} style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 800, marginBottom: 8, paddingInline: 10, letterSpacing: '0.5px' }}>
-              {section.title}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {section.items.map(link => {
-                const isActive = pathname === link.href;
-                return (
-                  <Link 
-                    key={link.href} 
-                    href={link.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                      borderRadius: 10, textDecoration: 'none', fontWeight: 700, fontSize: 13.5,
-                      transition: 'all 0.2s',
-                      background: isActive ? 'rgba(108,34,249,0.15)' : 'transparent',
-                      color: isActive ? '#6C22F9' : 'var(--text-main)'
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'rgba(108,34,249,0.06)';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'transparent';
-                      }
-                    }}
+      {/* Categorized Collapsable Menu Sections */}
+      <div style={{ padding: '16px 14px', flex: 1, overflowY: 'auto' }}>
+        {adminSidebarSections.map((section, sIdx) => {
+          const isCollapsed = !!collapsedSections[section.title];
+          const hasActiveChild = section.items.some(i => i.href === pathname);
+
+          return (
+            <div key={sIdx} style={{ marginBottom: 14 }}>
+              {/* Accordion / Dropdown Section Header */}
+              <button
+                type="button"
+                onClick={() => toggleSection(section.title)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 12, color: hasActiveChild ? '#6C22F9' : 'var(--text-muted)', fontWeight: 800,
+                  marginBottom: 6, fontFamily: 'Tajawal, sans-serif', borderRadius: 8,
+                  transition: 'background 0.2s', outline: 'none'
+                }}
+                onMouseOver={e => e.currentTarget.style.background = 'rgba(108,34,249,0.05)'}
+                onMouseOut={e => e.currentTarget.style.background = 'none'}
+              >
+                <span style={{ letterSpacing: '0.2px' }}>{section.title}</span>
+                <motion.div animate={{ rotate: isCollapsed ? -90 : 0 }} transition={{ duration: 0.2 }}>
+                  <ChevronDown size={14} color={hasActiveChild ? '#6C22F9' : 'var(--text-muted)'} />
+                </motion.div>
+              </button>
+
+              {/* Collapsable Items */}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}
                   >
-                    {link.icon}
-                    {link.label}
-                  </Link>
-                )
-              })}
+                    {section.items.map(link => {
+                      const isActive = pathname === link.href;
+                      return (
+                        <Link 
+                          key={link.href} 
+                          href={link.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                            borderRadius: 10, textDecoration: 'none', fontWeight: 700, fontSize: 13.5,
+                            transition: 'all 0.2s',
+                            background: isActive ? 'rgba(108,34,249,0.15)' : 'transparent',
+                            color: isActive ? '#6C22F9' : 'var(--text-main)'
+                          }}
+                          onMouseOver={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.background = 'rgba(108,34,249,0.06)';
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.background = 'transparent';
+                            }
+                          }}
+                        >
+                          {link.icon}
+                          {link.label}
+                        </Link>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Logout Button */}
-      <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
-        <button style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', width: '100%',
-          background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, fontSize: 14,
-          cursor: 'pointer', transition: 'all 0.2s', borderRadius: 10
-        }}
-        onClick={handleLogout}
-        onMouseOut={e => e.currentTarget.style.background = 'none'}
+      {/* Admin User Info Footer */}
+      <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #6C22F9, #4f46e5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>
+            {adminUser?.name ? adminUser.name.charAt(0) : 'ع'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text-main)' }}>{adminUser?.name || 'المهندس عبدالرحمن حامد'}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>👑 مالك المنصة (Super Admin)</span>
+          </div>
+        </div>
+
+        <button 
+          onClick={handleLogout}
+          title="تسجيل الخروج"
+          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+          onMouseOver={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+          onMouseOut={e => e.currentTarget.style.background = 'none'}
         >
-          <LogOut size={18} /> تسجيل الخروج
+          <LogOut size={18} />
         </button>
       </div>
     </>
   );
 
-  if (!mounted) return null;
-
-  // Standalone pages — no sidebar/layout wrapper
-  if (pathname === '/admin/login' || pathname === '/admin/accept-invite') {
-    return <>{children}</>;
-  }
-
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', color: 'var(--text-main)', direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', fontFamily: 'Tajawal, sans-serif', direction: 'rtl' }}>
       
       {/* Desktop Sidebar */}
-      <div className="desktop-sidebar" style={{ width: 270, background: 'var(--surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, bottom: 0, right: 0, zIndex: 50 }}>
+      <aside className="desktop-sidebar" style={{ width: 280, background: 'var(--surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', zIndex: 90 }}>
         <SidebarContent />
-      </div>
+      </aside>
+
+      {/* Mobile Drawer */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMobileMenuOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} />
+            <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ width: 280, background: 'var(--surface)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', zIndex: 101 }}>
+              <SidebarContent />
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
-      <div className="main-content" style={{ flex: 1, paddingRight: 270, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         
-        {/* Header */}
-        <header style={{ height: 74, background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px', position: 'sticky', top: 0, zIndex: 40 }}>
-          
+        {/* Top Navbar */}
+        <header style={{ height: 72, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)} style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}>
+            <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'none' }}>
               <Menu size={24} />
             </button>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-              {adminSidebarSections.flatMap(s => s.items).find(l => l.href === pathname)?.label || 'لوحة الإدارة'}
-            </h2>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)' }}>لوحة التحكم الإدارية الاحترافية</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {/* Dark Mode Toggle */}
             <ThemeToggle />
-
-            {/* Admin Dedicated Notification Center */}
-            <NotificationCenter isAdmin={true} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
-              <div style={{ textAlign: 'left' }} className="hidden-mobile">
-                <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text-main)' }}>{adminUser?.name || 'المهندس عبدالرحمن'}</p>
-                <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-muted)' }}>{adminUser?.email || 'المدير العام'}</p>
-              </div>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #6C22F9, #3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 16 }}>
-                ع
-              </div>
-            </div>
+            <NotificationCenter />
           </div>
         </header>
 
-        {/* Page Content */}
-        <main style={{ padding: '28px', flex: 1, overflowX: 'hidden', background: 'var(--bg)' }}>
+        {/* Dynamic Page Content */}
+        <main style={{ flex: 1, padding: 32 }}>
           {children}
         </main>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,50,0.6)', zIndex: 99, backdropFilter: 'blur(4px)' }}
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
-            <motion.div
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              style={{ position: 'fixed', top: 0, bottom: 0, right: 0, width: 270, background: 'var(--surface)', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)' }}
-            >
-              <button onClick={() => setIsMobileMenuOpen(false)} style={{ position: 'absolute', top: 20, left: 20, background: 'rgba(0,0,0,0.05)', border: 'none', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-main)' }}>
-                <X size={18} />
-              </button>
-              <SidebarContent />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      <style>{`
+      <style jsx global>{`
         @media (max-width: 991px) {
           .desktop-sidebar { display: none !important; }
-          .main-content { padding-right: 0 !important; }
-          .mobile-menu-btn { display: flex !important; }
-          .hidden-mobile { display: none !important; }
-          main { padding: 20px !important; }
+          .mobile-menu-btn { display: block !important; }
         }
       `}</style>
     </div>
