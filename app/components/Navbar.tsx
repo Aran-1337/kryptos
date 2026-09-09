@@ -20,10 +20,13 @@ export default function Navbar() {
 
   const loadAuthUser = () => {
     try {
-      const studentAuth = localStorage.getItem('student_auth') || document.cookie.includes('student_token=');
-      const adminAuth = localStorage.getItem('admin_user') || document.cookie.includes('admin_token=');
+      const hasStudentCookie = document.cookie.includes('student_token=active') || document.cookie.includes('student_token=demo_active');
+      const hasStudentStorage = localStorage.getItem('student_auth') === '1';
 
-      if (studentAuth) {
+      const hasAdminCookie = document.cookie.includes('admin_token=active') || document.cookie.includes('admin_token=1');
+      const hasAdminStorage = !!localStorage.getItem('admin_user_active');
+
+      if (hasStudentCookie || hasStudentStorage) {
         const savedProfile = localStorage.getItem('student_profile_info');
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
@@ -39,11 +42,13 @@ export default function Navbar() {
             avatarChar: 'ط'
           });
         }
-      } else if (adminAuth) {
+      } else if (hasAdminCookie || hasAdminStorage) {
+        const storedAdmin = localStorage.getItem('admin_user');
+        const parsed = storedAdmin ? JSON.parse(storedAdmin) : null;
         setLoggedInUser({
-          name: 'المهندس عبدالرحمن حامد',
+          name: parsed?.name || 'المهندس عبدالرحمن حامد',
           grade: 'مالك المنصة الرئيسي 👑',
-          avatarChar: 'ع'
+          avatarChar: (parsed?.name || 'ع').charAt(0)
         });
       } else {
         setLoggedInUser(null);
@@ -100,10 +105,18 @@ export default function Navbar() {
   }, [open]);
 
   const handleLogout = () => {
-    document.cookie = 'student_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    document.cookie = 'admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    // Clear all cookies
+    document.cookie = 'student_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'admin_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'admin_access_unlocked=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+
+    // Clear all localStorage auth tokens
     localStorage.removeItem('student_auth');
+    localStorage.removeItem('student_profile_info');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_user_active');
     localStorage.removeItem('accessToken');
+
     setLoggedInUser(null);
     setUserMenu(false);
     window.location.href = '/login';
@@ -111,7 +124,7 @@ export default function Navbar() {
 
   // Public Links
   const navLinks = [
-    { href: '/', label: 'الرئيسية' },
+    { href: loggedInUser ? '/dashboard' : '/', label: 'الرئيسية' },
     { href: '/courses', label: 'الكورسات' },
     { href: '/books', label: 'الكتب والمذكرات' },
     { href: '/live', label: 'البث المباشر' },
@@ -155,8 +168,8 @@ export default function Navbar() {
           transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
         }} className="nav-inner-container">
 
-        {/* Logo Anchored Right (Desktop vs Mobile Responsive Logos) */}
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', flexShrink: 0 }}>
+        {/* Logo Anchored Right (Navigates to /dashboard if logged in) */}
+        <Link href={loggedInUser ? '/dashboard' : '/'} style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', flexShrink: 0 }}>
           <img src={desktopLogo} alt="Logo Desktop" className="desktop-logo" style={{ height: isScrolled ? 42 : 50, width: 'auto', maxHeight: 52, objectFit: 'contain', transition: 'height 0.3s' }} />
           <img src={`${mobileLogo}?v=2`} alt="Logo Mobile" className="mobile-logo" style={{ height: isScrolled ? 38 : 46, width: 'auto', maxHeight: 48, objectFit: 'contain', transition: 'height 0.3s' }} />
         </Link>
@@ -164,7 +177,7 @@ export default function Navbar() {
         {/* Desktop Public Links */}
         <div style={{ display: 'flex', gap: 28, alignItems: 'center', justifyContent: 'center', flex: 1 }} className="hidden-mobile">
           {navLinks.map(l => (
-            <Link key={l.href} href={l.href} style={{
+            <Link key={l.label} href={l.href} style={{
               padding: '8px 14px', borderRadius: 10, fontWeight: 800, fontSize: isScrolled ? 14 : 15,
               color: 'var(--text-main)', textDecoration: 'none', transition: 'all .2s',
               whiteSpace: 'nowrap'
@@ -263,7 +276,7 @@ export default function Navbar() {
           padding: 24, gap: 16, fontFamily: 'Tajawal, sans-serif', direction: 'rtl',
         }}>
           {navLinks.map(l => (
-            <Link key={l.href} href={l.href} onClick={() => setOpen(false)} style={{
+            <Link key={l.label} href={l.href} onClick={() => setOpen(false)} style={{
               fontSize: 18, fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', padding: '12px 0',
               borderBottom: '1px solid var(--border)',
             }}>
