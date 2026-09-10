@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: mnasa-platform-backend
+    env: node
+    region: frankfurt
+    plan: free
+    rootDir: llm-backend-master
+    buildCommand: npm install
+    startCommand: node src/server.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_URL
+        value: http://localhost:3000
+      - key: JWT_SECRET
+        value: super_secret_jwt_key_mnasa_2026_prod
+      - key: JWT_REFRESH_SECRET
+        value: super_secret_refresh_key_mnasa_2026_prod
+      - key: ENCRYPTION_KEY
+        value: mnasa_educational_platform_32ch!
