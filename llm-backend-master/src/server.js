@@ -10,6 +10,9 @@ process.on('uncaughtException', (err) => {
 });
 
 const startServer = async () => {
+  // Validate production configuration before initializing resources
+  config.validateProductionConfig();
+
   await connectDB();
 
   const redisConfig = require('./config/redis');
@@ -27,10 +30,30 @@ const startServer = async () => {
     server.close(() => process.exit(1));
   });
 
-  process.on('SIGTERM', () => {
-    console.log('👋 SIGTERM received. Shutting down gracefully...');
-    server.close(() => console.log('Process terminated'));
-  });
+  // Graceful shutdown on SIGTERM / SIGINT
+  const gracefulShutdown = (signal) => {
+    console.log(`👋 ${signal} received. Shutting down gracefully...`);
+    server.close(async () => {
+      console.log('HTTP server closed');
+      try {
+        const mongoose = require('mongoose');
+        if (mongoose.connection.readyState !== 0) {
+          await mongoose.connection.close();
+          console.log('MongoDB connection closed');
+        }
+        if (redisConfig.redisAvailable && redisConfig.bullmqConnection) {
+          await redisConfig.bullmqConnection.quit().catch(() => {});
+          console.log('Redis queue connection closed');
+        }
+      } catch (err) {
+        console.error('Error during graceful shutdown:', err.message);
+      }
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 };
 
 startServer();

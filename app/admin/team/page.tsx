@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus, Trash2, RefreshCw, Shield, CheckCircle2, Clock, Copy, Check, X, Crown, Key } from 'lucide-react';
+import { API_BASE_URL } from '@/app/lib/api';
 
 const ALL_PERMISSIONS = [
   { key: 'courses',    label: 'إدارة الكورسات',        icon: '📚' },
@@ -65,7 +66,7 @@ export default function TeamPage() {
 
   const fetchMembers = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/v1/team', {
+      const res = await fetch(`${API_BASE_URL}/team`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
@@ -97,7 +98,7 @@ export default function TeamPage() {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/api/v1/team/invite', {
+      const res = await fetch(`${API_BASE_URL}/team/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ name: inviteName, email: inviteEmail, permissions: invitePerms }),
@@ -123,7 +124,7 @@ export default function TeamPage() {
 
   const handleUpdatePermissions = async (memberId: string, permissions: string[]) => {
     try {
-      await fetch(`http://localhost:5000/api/v1/team/${memberId}/permissions`, {
+      await fetch(`${API_BASE_URL}/team/${memberId}/permissions`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ permissions }),
@@ -145,7 +146,7 @@ export default function TeamPage() {
     }
     if (!confirm(`هل أنت متأكد من حذف "${name}"؟`)) return;
     try {
-      await fetch(`http://localhost:5000/api/v1/team/${id}`, {
+      await fetch(`${API_BASE_URL}/team/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${getToken()}` },
       });

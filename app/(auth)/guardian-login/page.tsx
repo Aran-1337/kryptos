@@ -36,27 +36,7 @@ export default function GuardianLoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errs = validate();
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
-    setLoading(true);
-    setApiError('');
-    try {
-      const res = await fetch(`${API}/auth/guardian-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ phone: form.phone, password: form.password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'حدث خطأ، حاول مرة أخرى');
-      localStorage.setItem('accessToken', data.data.accessToken);
-      router.push('/dashboard');
-    } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'حدث خطأ، حاول مرة أخرى');
-    } finally {
-      setLoading(false);
-    }
+    setApiError('بوابة ولي الأمر قيد التطوير والتفعيل حالياً. يمكنك متابعة تقارير وأداء الطالب مباشرة عبر تسجيل الدخول بحساب الطالب.');
   };
 
   return (

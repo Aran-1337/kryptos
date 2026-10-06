@@ -7,26 +7,64 @@ const { emailQueue, notificationQueue } = require('../../services/queue.service'
 const { emailTemplates } = require('../../services/email.service');
 const mongoose = require('mongoose');
 
+const withTransaction = async (work) => {
+  let session = null;
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+  } catch (err) {
+    session = null;
+  }
+
+  if (!session) {
+    return await work(null);
+  }
+
+  try {
+    const result = await work(session);
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
+    return result;
+  } catch (err) {
+    if (session.inTransaction()) {
+      await session.abortTransaction().catch(() => {});
+    }
+    // If standalone MongoDB does not support transactions, retry without session
+    if (err.message && err.message.includes('Transaction numbers are only allowed on a replica set member')) {
+      session.endSession();
+      session = null;
+      return await work(null);
+    }
+    throw err;
+  } finally {
+    if (session) {
+      session.endSession();
+    }
+  }
+};
+
 /**
  * Create order and enroll student in course
  * Designed to support any payment gateway
  */
 const createOrder = async (userId, items) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    // Validate items and calculate total
+  return await withTransaction(async (session) => {
+    const opts = session ? { session } : {};
     let totalAmount = 0;
     const orderItems = [];
 
     for (const item of items) {
-      const course = await Course.findById(item.courseId).session(session);
+      const courseQuery = Course.findById(item.courseId);
+      if (session) courseQuery.session(session);
+      const course = await courseQuery;
       if (!course) throw new AppError(`الكورس ${item.courseId} غير موجود`, 404);
       if (!course.isPublished) throw new AppError('الكورس غير متاح حالياً', 400);
 
       // Check if already enrolled
-      const user = await User.findById(userId).session(session);
+      const userQuery = User.findById(userId);
+      if (session) userQuery.session(session);
+      const user = await userQuery;
       if (user.enrolledCourses.includes(course._id)) {
         throw new AppError(`أنت مسجل بالفعل في كورس "${course.title}"`, 400);
       }
@@ -41,14 +79,12 @@ const createOrder = async (userId, items) => {
       items: orderItems,
       totalAmount,
       status: totalAmount === 0 ? 'completed' : 'pending',
-    }], { session });
+    }], opts);
 
     // If free, enroll immediately
     if (totalAmount === 0) {
       await enrollUserInCourses(userId, orderItems.map(i => i.item), session);
     }
-
-    await session.commitTransaction();
 
     // Send confirmation email
     const user = await User.findById(userId);
@@ -56,55 +92,67 @@ const createOrder = async (userId, items) => {
     await emailQueue.add('order-email', { to: user.email, ...template });
 
     return order;
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+  });
 };
 
 /**
- * Called by payment gateway webhook after successful payment
+ * Complete order after successful payment or admin approval.
+ * IDEMPOTENT: If the order is already completed, returns existing order safely
+ * without repeating course enrollments or sending duplicate notifications.
  */
-const completeOrder = async (orderId, paymentData) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const completeOrder = async (orderId, paymentData = {}) => {
+  if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new AppError('معرف الطلب غير صالح', 400);
+  }
 
-  try {
-    const order = await Order.findById(orderId).session(session);
+  return await withTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    const orderQuery = Order.findById(orderId);
+    if (session) orderQuery.session(session);
+    const order = await orderQuery;
+
     if (!order) throw new AppError('الطلب غير موجود', 404);
-    if (order.status === 'completed') throw new AppError('الطلب مكتمل بالفعل', 400);
+
+    // Idempotency: If already completed, safely return order without duplicate fulfillment
+    if (order.status === 'completed') {
+      return order;
+    }
+
+    // Only pending orders can be transitioned to completed
+    if (order.status !== 'pending') {
+      throw new AppError(`لا يمكن إكمال طلب بحالة "${order.status}"`, 400);
+    }
 
     order.status = 'completed';
-    order.paymentMethod = paymentData.method;
-    order.paymentGateway = paymentData.gateway;
-    order.transactionId = paymentData.transactionId;
+    order.paymentMethod = paymentData.method || 'manual';
+    order.paymentGateway = paymentData.gateway || 'manual';
+    order.transactionId = paymentData.transactionId || `tx_${Date.now()}`;
     order.paymentDetails = paymentData;
-    await order.save({ session });
+    await order.save(opts);
 
     const courseIds = order.items.filter(i => i.itemType === 'course').map(i => i.item);
     await enrollUserInCourses(order.user, courseIds, session);
 
-    await session.commitTransaction();
+    console.log(
+      `[PAYMENT AUDIT] Order ${order._id} completed via gateway: ${paymentData.gateway}, transactionId: ${paymentData.transactionId}${
+        paymentData.approvedBy ? `, approvedBy: ${paymentData.approvedBy}` : ''
+      }`
+    );
+
     return order;
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+  });
 };
 
 const enrollUserInCourses = async (userId, courseIds, session) => {
+  const opts = session ? { session } : {};
   await User.findByIdAndUpdate(userId, {
     $addToSet: { enrolledCourses: { $each: courseIds } },
-  }, { session });
+  }, opts);
 
   await Course.updateMany(
     { _id: { $in: courseIds } },
     { $inc: { totalStudents: 1 } },
-    { session }
+    opts
   );
 
   // Send enrollment notification
@@ -126,4 +174,21 @@ const getUserOrders = async (userId, query) => {
   return paginateResponse(orders, total, page, limit);
 };
 
-module.exports = { createOrder, completeOrder, getUserOrders };
+const getOrderById = async (orderId, userId, user) => {
+  if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new AppError('معرف الطلب غير صالح', 400);
+  }
+  const order = await Order.findById(orderId);
+  if (!order) throw new AppError('الطلب غير موجود', 404);
+
+  const isOwner = order.user.toString() === userId.toString();
+  const isAdminOrFinance = user.role === 'admin' || user.permissions?.includes('*') || user.permissions?.includes('payments');
+
+  if (!isOwner && !isAdminOrFinance) {
+    throw new AppError('غير مصرح لك بالاطلاع على هذا الطلب', 403);
+  }
+
+  return order;
+};
+
+module.exports = { createOrder, completeOrder, getUserOrders, getOrderById };

@@ -84,7 +84,11 @@ userSchema.methods.toJSON = function () {
   delete obj.password;
   delete obj.refreshTokens;
   delete obj.emailVerificationToken;
+  delete obj.emailVerificationExpires;
   delete obj.passwordResetToken;
+  delete obj.passwordResetExpires;
+  delete obj.fcmTokens;
+  delete obj.__v;
   return obj;
 };
 

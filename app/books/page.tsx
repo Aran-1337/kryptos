@@ -7,6 +7,7 @@ import { BookOpen, Download, Truck, CheckCircle2, Star, ShieldCheck, MapPin, Pho
 
 export default function BooksPage() {
   const [activeCategory, setActiveCategory] = useState<'all' | 'printed' | 'digital'>('all');
+  const [selectedGrade, setSelectedGrade] = useState('الكل');
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -15,6 +16,23 @@ export default function BooksPage() {
     const token = localStorage.getItem('accessToken') || localStorage.getItem('admin_user');
     const hasCookie = document.cookie.includes('admin_token=') || document.cookie.includes('refreshToken=');
     setIsLoggedIn(!!token || hasCookie);
+
+    try {
+      const savedProfile = localStorage.getItem('student_profile_info');
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        if (parsed.grade) {
+          const g = parsed.grade.toLowerCase();
+          const is2 = g.includes('ثاني') || g.includes('ثانية') || g.includes('تاني') || g.includes('تانية') || g.includes('2') || g.includes('grade2');
+          const is1 = g.includes('أول') || g.includes('اول') || g.includes('1') || g.includes('grade1');
+          if (is2 && !is1) {
+            setSelectedGrade('ثانية ثانوي');
+          } else if (is1 && !is2) {
+            setSelectedGrade('أولى ثانوي');
+          }
+        }
+      }
+    } catch {}
   }, []);
 
   const books = [
@@ -81,8 +99,9 @@ export default function BooksPage() {
   ];
 
   const filteredBooks = books.filter(b => {
-    if (activeCategory === 'printed') return b.type === 'printed';
-    if (activeCategory === 'digital') return b.type === 'digital';
+    if (activeCategory === 'printed' && b.type !== 'printed') return false;
+    if (activeCategory === 'digital' && b.type !== 'digital') return false;
+    if (selectedGrade !== 'الكل' && b.grade !== 'الكل' && !b.grade.includes('تأسيس') && b.grade !== selectedGrade) return false;
     return true;
   });
 

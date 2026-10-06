@@ -62,8 +62,8 @@ async function runAudit() {
     console.log('\n=== Step 1: Stealth Unlock & Auth ===');
     
     // Unlock secret gate
-    console.log('Navigating to http://localhost:3000/secret-gate?key=mnasa2025...');
-    await page.goto('http://localhost:3000/secret-gate?key=mnasa2025', { waitUntil: 'networkidle2' });
+    console.log('Navigating to http://localhost:3000/secret-gate?key=devaran...');
+    await page.goto('http://localhost:3000/secret-gate?key=devaran', { waitUntil: 'networkidle2' });
     await new Promise(r => setTimeout(r, 1500));
     
     const gateSs = await takeScreenshot(page, '01_secret_gate_unlocked');

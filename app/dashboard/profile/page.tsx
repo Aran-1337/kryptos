@@ -50,6 +50,7 @@ export default function ProfilePage() {
     };
     setProfile(updated);
     localStorage.setItem('student_profile_info', JSON.stringify(updated));
+    window.dispatchEvent(new Event('student_profile_updated'));
 
     setShowEditModal(false);
     setNewPassword('');

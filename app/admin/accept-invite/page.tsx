@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Eye, EyeOff, ShieldCheck, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from '@/app/lib/api';
 
 function AcceptInviteContent() {
   const router = useRouter();
@@ -35,7 +36,7 @@ function AcceptInviteContent() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/v1/team/accept-invite', {
+      const res = await fetch(`${API_BASE_URL}/team/accept-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),

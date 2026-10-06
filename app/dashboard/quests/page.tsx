@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, Trophy, Award, CheckCircle2, Gift, Wallet, ArrowLeft, Sparkles, Clock, Truck, MapPin, Phone, User, X, Check } from 'lucide-react';
+import { Flame, Trophy, Award, CheckCircle2, Gift, Wallet, ArrowLeft, Sparkles, Clock, Truck, MapPin, Phone, User, X, Check, GraduationCap, Filter } from 'lucide-react';
 import Link from 'next/link';
 
 export interface QuestItem {
@@ -11,6 +11,7 @@ export interface QuestItem {
   rewardType: 'money' | 'physical'; // 'money' = مبلغ مالي, 'physical' = هدية ملموسة
   rewardAmount?: number;
   rewardGiftName?: string;
+  grade?: string; // المرحلة الدراسية المستهدفة
   progress: number;
   isCompleted: boolean;
   isClaimed: boolean;
@@ -25,6 +26,7 @@ const initialQuests: QuestItem[] = [
     description: 'حل امتحان الخوارزميات والحصول على درجة ممتاز بدون أي إنذارات.',
     rewardType: 'money',
     rewardAmount: 50,
+    grade: 'الصف الأول الثانوي',
     progress: 100,
     isCompleted: true,
     isClaimed: false,
@@ -33,9 +35,10 @@ const initialQuests: QuestItem[] = [
   {
     id: 'q-2',
     title: 'وسام المتفوق البرمجي (هدية قيمة 🎁)',
-    description: 'إكمال الدورة التأسيسية والحصول على أعلى درجة في الاختبار الشامل.',
+    description: 'إكمال دورة بايثون والذكاء الاصطناعي والحصول على أعلى درجة في الاختبار الشامل.',
     rewardType: 'physical',
     rewardGiftName: 'مجموعة المذكرات الورقية المطبوعة + ميدالية التفوق البرمجي 🏅',
+    grade: 'الصف الثاني الثانوي',
     progress: 100,
     isCompleted: true,
     isClaimed: false,
@@ -44,9 +47,10 @@ const initialQuests: QuestItem[] = [
   {
     id: 'q-3',
     title: 'الانضباط البرمجي (مشاهدة 4 دروس عملي هذا الأسبوع)',
-    description: 'إنجاز 4 دروس فيديو كاملة في كورس أولى ثانوي بدون تخطي.',
+    description: 'إنجاز 4 دروس فيديو كاملة في المنهج هذا الأسبوع بدون تخطي.',
     rewardType: 'money',
     rewardAmount: 35,
+    grade: 'الصف الأول الثانوي',
     progress: 75,
     isCompleted: false,
     isClaimed: false,
@@ -58,6 +62,7 @@ const initialQuests: QuestItem[] = [
     description: 'التواجد ضمن الثلاثة الأوائل في لوحة المتفوقين لهذا الأسبوع.',
     rewardType: 'money',
     rewardAmount: 100,
+    grade: 'all',
     progress: 100,
     isCompleted: true,
     isClaimed: true,
@@ -68,6 +73,8 @@ const initialQuests: QuestItem[] = [
 export default function StudentQuestsPage() {
   const [walletBalance, setWalletBalance] = useState(450);
   const [quests, setQuests] = useState<QuestItem[]>(initialQuests);
+  const [studentGrade, setStudentGrade] = useState('الصف الأول الثانوي');
+  const [activeTab, setActiveTab] = useState<'my_grade' | 'all'>('my_grade');
   
   // Physical Gift Shipping Modal State
   const [shippingQuest, setShippingQuest] = useState<QuestItem | null>(null);
@@ -77,9 +84,41 @@ export default function StudentQuestsPage() {
   const [address, setAddress] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 
+  // Linguistic Helper for Academic Grade Matching
+  const getGradeCategory = (rawGrade?: string): 'grade1' | 'grade2' | 'grade3' | 'foundation' | 'all' => {
+    if (!rawGrade || rawGrade === 'all' || rawGrade.includes('كافة') || rawGrade.includes('الكل') || rawGrade.includes('جميع')) return 'all';
+    const s = rawGrade.trim().toLowerCase();
+    const is1 = s.includes('أولى') || s.includes('اولى') || s.includes('1') || s.includes('الأول') || s.includes('الاول');
+    const is2 = s.includes('ثاني') || s.includes('ثانية') || s.includes('تاني') || s.includes('تانية') || s.includes('2');
+    const is3 = s.includes('ثالث') || s.includes('ثالثة') || s.includes('تالت') || s.includes('تالتة') || s.includes('3');
+    const isFound = s.includes('تأسيس') || s.includes('تاسيس') || s.includes('0');
+
+    if (is1 && !is2 && !is3) return 'grade1';
+    if (is2 && !is1 && !is3) return 'grade2';
+    if (is3 && !is1 && !is2) return 'grade3';
+    if (isFound) return 'foundation';
+    return 'all';
+  };
+
+  const matchesStudentGrade = (qGrade?: string, sGrade?: string) => {
+    const qCat = getGradeCategory(qGrade);
+    if (qCat === 'all') return true;
+    const sCat = getGradeCategory(sGrade);
+    return qCat === sCat;
+  };
+
   useEffect(() => {
     const loadQuests = () => {
       try {
+        const savedProfile = localStorage.getItem('student_profile_info');
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile);
+          if (parsed.grade) setStudentGrade(parsed.grade);
+          if (parsed.name && !fullName) setFullName(parsed.name);
+          if (parsed.phone && !phone) setPhone(parsed.phone);
+          if (parsed.governorate) setGovernorate(parsed.governorate);
+        }
+
         const savedBalance = localStorage.getItem('student_wallet_balance');
         if (savedBalance) setWalletBalance(Number(savedBalance));
 
@@ -187,7 +226,7 @@ export default function StudentQuestsPage() {
 
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', padding: '4px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, marginBottom: 12 }}>
-            <Flame size={16} color="#f59e0b" /> التحديات والجوائز المتاحة
+            <Flame size={16} color="#f59e0b" /> تحديات وجوائز {studentGrade || 'سنتك الدراسية'} 🎓
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 8px', color: '#fff' }}>تحديات المذاكرة والجوائز 🎯</h1>
           <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, margin: 0, maxWidth: 520, lineHeight: 1.6 }}>
@@ -202,9 +241,61 @@ export default function StudentQuestsPage() {
         </div>
       </div>
 
+      {/* Grade Filter Tabs for Student */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setActiveTab('my_grade')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 20px',
+              borderRadius: 12,
+              border: activeTab === 'my_grade' ? '2px solid #6C22F9' : '1px solid var(--border)',
+              background: activeTab === 'my_grade' ? 'rgba(108,34,249,0.12)' : 'var(--surface)',
+              color: activeTab === 'my_grade' ? '#6C22F9' : 'var(--text-main)',
+              fontWeight: 900,
+              fontSize: 13.5,
+              cursor: 'pointer',
+              fontFamily: 'Tajawal, sans-serif'
+            }}
+          >
+            <GraduationCap size={16} />
+            تحديات سنتي الدراسية ({quests.filter(q => matchesStudentGrade(q.grade, studentGrade)).length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('all')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 20px',
+              borderRadius: 12,
+              border: activeTab === 'all' ? '2px solid #6C22F9' : '1px solid var(--border)',
+              background: activeTab === 'all' ? 'rgba(108,34,249,0.12)' : 'var(--surface)',
+              color: activeTab === 'all' ? '#6C22F9' : 'var(--text-main)',
+              fontWeight: 800,
+              fontSize: 13.5,
+              cursor: 'pointer',
+              fontFamily: 'Tajawal, sans-serif'
+            }}
+          >
+            كافة التحديات ({quests.length})
+          </button>
+        </div>
+
+        <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 700 }}>
+          سنتك المقيدة: <strong style={{ color: '#6C22F9' }}>{studentGrade}</strong>
+        </span>
+      </div>
+
       {/* Quests List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {quests.map(q => (
+        {quests
+          .filter(q => activeTab === 'all' || matchesStudentGrade(q.grade, studentGrade))
+          .map(q => (
           <div key={q.id} style={{ background: 'var(--surface)', borderRadius: 20, border: '1px solid var(--border)', padding: 24, boxShadow: 'var(--shadow-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
             
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', flex: 1, minWidth: 280 }}>
@@ -212,8 +303,19 @@ export default function StudentQuestsPage() {
                 {q.icon}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-main)', margin: 0 }}>{q.title}</h3>
+                  <span style={{
+                    fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                    background: 'rgba(108,34,249,0.12)',
+                    color: '#6C22F9',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    <GraduationCap size={12} />
+                    {q.grade === 'all' || !q.grade ? 'كافة المراحل 🌐' : q.grade}
+                  </span>
                   <span style={{
                     fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
                     background: q.rewardType === 'physical' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',

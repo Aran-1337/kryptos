@@ -31,15 +31,15 @@ export default function Navbar() {
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
           setLoggedInUser({
-            name: parsed.name || 'طالب متميز',
+            name: parsed.name || 'أحمد محمود',
             grade: parsed.grade || 'الصف الأول الثانوي',
-            avatarChar: (parsed.name || 'ط').charAt(0)
+            avatarChar: (parsed.name || 'أ').charAt(0)
           });
         } else {
           setLoggedInUser({
-            name: 'طالب متميز',
+            name: 'أحمد محمود',
             grade: 'الصف الأول الثانوي',
-            avatarChar: 'ط'
+            avatarChar: 'أ'
           });
         }
       } else if (hasAdminCookie || hasAdminStorage) {
@@ -130,7 +130,7 @@ export default function Navbar() {
     { href: '/live', label: 'البث المباشر' },
   ];
 
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.includes('/watch') || pathname.startsWith('/certificates')) {
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.includes('/watch') || pathname.startsWith('/certificates') || pathname.startsWith('/register') || pathname.startsWith('/login')) {
     return null;
   }
 

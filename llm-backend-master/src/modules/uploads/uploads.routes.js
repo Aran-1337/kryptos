@@ -21,8 +21,18 @@ const catchAsync = require('../../utils/catchAsync');
 const { sendResponse } = require('../../utils/response');
 const { protect, restrictTo } = require('../../middlewares/auth.middleware');
 
+const { body } = require('express-validator');
+const validate = require('../../middlewares/validate.middleware');
+
+const logAccessValidator = [
+  body('resourceType').isIn(['video', 'pdf', 'attachment']).withMessage('نوع المورد غير صالح'),
+  body('resourceId').isMongoId().withMessage('معرف المورد غير صالح'),
+  body('action').optional().isIn(['view', 'download']).withMessage('نوع الإجراء غير صالح'),
+  validate,
+];
+
 // Log a resource access (called internally or by client after viewing)
-router.post('/log', protect, catchAsync(async (req, res) => {
+router.post('/log', protect, logAccessValidator, catchAsync(async (req, res) => {
   await AccessLog.create({
     user: req.user._id,
     resourceType: req.body.resourceType,

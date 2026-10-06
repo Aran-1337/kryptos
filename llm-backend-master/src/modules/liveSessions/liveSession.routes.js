@@ -17,10 +17,21 @@ router.get('/', catchAsync(async (req, res) => {
   sendResponse(res, 200, paginateResponse(sessions, total, page, limit));
 }));
 
+const {
+  liveSessionIdParamValidator,
+  createLiveSessionValidator,
+  updateLiveSessionStatusValidator,
+} = require('./liveSession.validator');
+
 router.use(protect);
 
-router.post('/', restrictTo('admin', 'instructor'), catchAsync(async (req, res) => {
-  const session = await LiveSession.create({ ...req.body, instructor: req.user._id });
+router.post('/', restrictTo('admin', 'instructor'), createLiveSessionValidator, catchAsync(async (req, res) => {
+  const allowed = ['title', 'description', 'startDate', 'duration', 'meetingUrl', 'courseId'];
+  const cleanData = {};
+  for (const f of allowed) {
+    if (req.body[f] !== undefined) cleanData[f] = req.body[f];
+  }
+  const session = await LiveSession.create({ ...cleanData, instructor: req.user._id, status: 'scheduled', registeredStudents: [] });
 
   // Schedule reminder 5 minutes before
   const reminderDelay = new Date(session.startDate).getTime() - Date.now() - 5 * 60 * 1000;
@@ -31,7 +42,7 @@ router.post('/', restrictTo('admin', 'instructor'), catchAsync(async (req, res) 
   sendResponse(res, 201, { session }, 'تم إنشاء الجلسة المباشرة بنجاح');
 }));
 
-router.post('/:id/register', catchAsync(async (req, res) => {
+router.post('/:id/register', liveSessionIdParamValidator, catchAsync(async (req, res) => {
   const session = await LiveSession.findById(req.params.id);
   if (!session) throw new AppError('الجلسة غير موجودة', 404);
   if (session.status !== 'scheduled') throw new AppError('لا يمكن التسجيل في هذه الجلسة', 400);
@@ -47,9 +58,41 @@ router.post('/:id/register', catchAsync(async (req, res) => {
   sendResponse(res, 200, {}, 'تم التسجيل في الجلسة المباشرة بنجاح');
 }));
 
-router.patch('/:id/status', restrictTo('admin', 'instructor'), catchAsync(async (req, res) => {
-  const session = await LiveSession.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+router.patch('/:id/status', restrictTo('admin', 'instructor'), updateLiveSessionStatusValidator, catchAsync(async (req, res) => {
+  const session = await LiveSession.findById(req.params.id);
+  if (!session) throw new AppError('الجلسة غير موجودة', 404);
+  if (req.user.role !== 'admin' && session.instructor.toString() !== req.user._id.toString()) {
+    throw new AppError('غير مصرح', 403);
+  }
+
+  const ALLOWED_TRANSITIONS = {
+    scheduled: ['live', 'cancelled'],
+    live: ['ended', 'cancelled'],
+    ended: [],
+    cancelled: [],
+  };
+
+  const newStatus = req.body.status;
+  if (session.status !== newStatus) {
+    const validNextStates = ALLOWED_TRANSITIONS[session.status] || [];
+    if (!validNextStates.includes(newStatus)) {
+      throw new AppError(`انتقال غير صالح لحالة الجلسة من "${session.status}" إلى "${newStatus}"`, 400);
+    }
+  }
+
+  session.status = newStatus;
+  await session.save();
   sendResponse(res, 200, { session }, 'تم تحديث حالة الجلسة');
+}));
+
+router.delete('/:id', restrictTo('admin', 'instructor'), liveSessionIdParamValidator, catchAsync(async (req, res) => {
+  const session = await LiveSession.findById(req.params.id);
+  if (!session) throw new AppError('الجلسة غير موجودة', 404);
+  if (req.user.role !== 'admin' && session.instructor.toString() !== req.user._id.toString()) {
+    throw new AppError('غير مصرح', 403);
+  }
+  await LiveSession.findByIdAndDelete(req.params.id);
+  sendResponse(res, 200, {}, 'تم حذف الجلسة المباشرة بنجاح');
 }));
 
 module.exports = router;

@@ -7,6 +7,7 @@ import { BarChart3, Users, Users2, BookOpen, KeyRound, Settings, LogOut, Menu, X
 import { motion, AnimatePresence } from 'framer-motion';
 import ThemeToggle from '../components/ThemeToggle';
 import NotificationCenter from '../components/NotificationCenter';
+import { API_BASE_URL } from '@/app/lib/api';
 
 // Grouped Admin Sidebar Sections
 const adminSidebarSections = [
@@ -89,7 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:5000/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch {}
     document.cookie = 'admin_token=; path=/; max-age=0';
     localStorage.removeItem('admin_user');

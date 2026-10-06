@@ -6,25 +6,13 @@ const { sendResponse } = require('../../utils/response');
 const { protect } = require('../../middlewares/auth.middleware');
 const AppError = require('../../utils/AppError');
 
-router.use(protect);
+const { param } = require('express-validator');
+const validate = require('../../middlewares/validate.middleware');
 
-router.get('/my-certificates', catchAsync(async (req, res) => {
-  const certificates = await Certificate.find({ user: req.user._id })
-    .populate('course', 'title thumbnail');
-  sendResponse(res, 200, { certificates });
-}));
-
-// Download certificate - generates signed URL
-router.get('/:id/download', catchAsync(async (req, res) => {
-  const cert = await Certificate.findById(req.params.id).select('+pdf.publicId');
-  if (!cert) throw new AppError('الشهادة غير موجودة', 404);
-  if (cert.user.toString() !== req.user._id.toString()) {
-    throw new AppError('غير مصرح', 403);
-  }
-
-  const signedUrl = generateSignedUrl(cert.pdf.publicId, 'raw', 3600);
-  sendResponse(res, 200, { url: signedUrl, expiresIn: 3600 });
-}));
+const certIdParamValidator = [
+  param('id').isMongoId().withMessage('معرف الشهادة غير صالح'),
+  validate,
+];
 
 // Verify certificate by ID (public)
 router.get('/verify/:certificateId', catchAsync(async (req, res) => {
@@ -41,6 +29,26 @@ router.get('/verify/:certificateId', catchAsync(async (req, res) => {
       issuedAt: cert.issuedAt,
     },
   });
+}));
+
+router.use(protect);
+
+router.get('/my-certificates', catchAsync(async (req, res) => {
+  const certificates = await Certificate.find({ user: req.user._id })
+    .populate('course', 'title thumbnail');
+  sendResponse(res, 200, { certificates });
+}));
+
+// Download certificate - generates signed URL
+router.get('/:id/download', certIdParamValidator, catchAsync(async (req, res) => {
+  const cert = await Certificate.findById(req.params.id).select('+pdf.publicId');
+  if (!cert) throw new AppError('الشهادة غير موجودة', 404);
+  if (req.user.role !== 'admin' && cert.user.toString() !== req.user._id.toString()) {
+    throw new AppError('غير مصرح', 403);
+  }
+
+  const signedUrl = generateSignedUrl(cert.pdf.publicId, 'raw', 3600);
+  sendResponse(res, 200, { url: signedUrl, expiresIn: 3600 });
 }));
 
 module.exports = router;

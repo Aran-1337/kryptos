@@ -5,10 +5,10 @@ const Order = require('../orders/order.model');
 const Progress = require('../progress/progress.model');
 const catchAsync = require('../../utils/catchAsync');
 const { sendResponse } = require('../../utils/response');
-const { protect, restrictTo } = require('../../middlewares/auth.middleware');
+const { protect, restrictTo, requirePermission } = require('../../middlewares/auth.middleware');
 const redis = require('../../config/redis');
 
-router.use(protect, restrictTo('admin', 'instructor'));
+router.use(protect, requirePermission('analytics'));
 
 router.get('/stats', catchAsync(async (req, res) => {
   const cacheKey = `dashboard:stats:${req.user._id}`;

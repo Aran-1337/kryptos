@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '@/app/lib/api';
 
 const LOCKOUT_MINUTES = 15;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -64,7 +65,7 @@ function AdminLoginContent() {
 
     try {
       // First try admin login (User model)
-      let res = await fetch('http://localhost:5000/api/v1/auth/login', {
+      let res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -76,7 +77,7 @@ function AdminLoginContent() {
 
       // If failed or not admin role, try team member login
       if (!res.ok || data.data?.user?.role !== 'admin') {
-        const teamRes = await fetch('http://localhost:5000/api/v1/team/login', {
+        const teamRes = await fetch(`${API_BASE_URL}/team/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -107,13 +108,14 @@ function AdminLoginContent() {
       if (!accessToken) { setError('حدث خطأ، حاول تاني'); setLoading(false); return; }
 
       document.cookie = `admin_token=${accessToken}; path=/; max-age=${60 * 60 * 8}; SameSite=Strict`;
+      localStorage.setItem('adminToken', accessToken);
       const userData = data.data?.user;
       localStorage.setItem('admin_user', JSON.stringify(isAssistant ? { ...userData, role: 'assistant' } : userData));
 
       setLoginAttempts(0);
       router.push(redirect);
     } catch {
-      setError('تعذر الاتصال بالسيرفر. تأكد من تشغيل الـ Backend');
+      setError('تعذر الاتصال بالسيرفر. تأكد من تشغيل الـ Backend وصحة البيانات');
       setLoading(false);
     }
   };
@@ -213,6 +215,28 @@ function AdminLoginContent() {
                   </span>
                 ) : 'تسجيل الدخول'}
               </motion.button>
+
+              {/* Quick Fill / Demo Login */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('admin@platform.com');
+                  setPassword('Admin123456!');
+                }}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px dashed rgba(255,255,255,0.25)',
+                  color: 'rgba(255,255,255,0.75)',
+                  borderRadius: 12,
+                  padding: '10px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: 'Tajawal, sans-serif'
+                }}
+              >
+                ⚡️ تعبئة بيانات الأدمن تلقائياً (admin@platform.com)
+              </button>
             </form>
           </>
         )}

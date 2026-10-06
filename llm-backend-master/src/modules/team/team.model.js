@@ -39,6 +39,8 @@ teamMemberSchema.methods.toJSON = function () {
   delete obj.password;
   delete obj.refreshTokens;
   delete obj.inviteToken;
+  delete obj.inviteExpires;
+  delete obj.__v;
   return obj;
 };
 

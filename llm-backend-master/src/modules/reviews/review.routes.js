@@ -31,7 +31,15 @@ router.post('/', protect, requireEnrollment, catchAsync(async (req, res) => {
   sendResponse(res, 201, { review }, 'تم إضافة تقييمك بنجاح');
 }));
 
-router.delete('/:reviewId', protect, catchAsync(async (req, res) => {
+const { param } = require('express-validator');
+const validate = require('../../middlewares/validate.middleware');
+
+const reviewIdParamValidator = [
+  param('reviewId').isMongoId().withMessage('معرف التقييم غير صالح'),
+  validate,
+];
+
+router.delete('/:reviewId', reviewIdParamValidator, protect, catchAsync(async (req, res) => {
   const review = await Review.findById(req.params.reviewId);
   if (!review) throw new AppError('التقييم غير موجود', 404);
   if (review.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {

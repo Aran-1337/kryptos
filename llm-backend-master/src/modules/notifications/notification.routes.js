@@ -6,6 +6,14 @@ const { sendResponse } = require('../../utils/response');
 const { protect } = require('../../middlewares/auth.middleware');
 const { paginate, paginateResponse } = require('../../helpers/pagination');
 
+const { param } = require('express-validator');
+const validate = require('../../middlewares/validate.middleware');
+
+const notificationIdParamValidator = [
+  param('id').isMongoId().withMessage('معرف الإشعار غير صالح'),
+  validate,
+];
+
 router.use(protect);
 
 router.get('/', catchAsync(async (req, res) => {
@@ -22,7 +30,7 @@ router.get('/', catchAsync(async (req, res) => {
   sendResponse(res, 200, { ...paginateResponse(notifications, total, page, limit), unreadCount });
 }));
 
-router.patch('/:id/read', catchAsync(async (req, res) => {
+router.patch('/:id/read', notificationIdParamValidator, catchAsync(async (req, res) => {
   await Notification.findOneAndUpdate({ _id: req.params.id, user: req.user._id }, { isRead: true });
   sendResponse(res, 200, {}, 'تم تحديد الإشعار كمقروء');
 }));

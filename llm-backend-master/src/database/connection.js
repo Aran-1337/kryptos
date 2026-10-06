@@ -9,6 +9,10 @@ const connectDB = async () => {
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
     return;
   } catch (err) {
+    if (config.env === 'production') {
+      console.error('❌ Production MongoDB connection failed:', err.message);
+      throw new Error(`Production database connection failed: ${err.message}`);
+    }
     console.warn('⚠️ Local MongoDB not running. Starting In-Memory MongoDB Server...');
   }
 
@@ -49,9 +53,9 @@ const connectDB = async () => {
           acceptPrivacy: true,
           role: 'admin',
           isEmailVerified: true,
-          isActive: true
+          isActive: true,
         });
-        console.log('🎉 Default Admin created successfully: admin@platform.com / Admin123456!');
+        console.log('🎉 Default Admin initialized successfully');
       }
     } catch (seedErr) {
       console.warn('Admin seed note:', seedErr.message);

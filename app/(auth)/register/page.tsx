@@ -1,367 +1,845 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { FiArrowRight, FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
-import { HiAcademicCap } from 'react-icons/hi2';
-import Stepper from './_components/Stepper';
-import Step1Account from './_components/Step1Account';
-import Step2Student from './_components/Step2Student';
-import Step3Guardian from './_components/Step3Guardian';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  User, 
+  Phone, 
+  Mail, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  GraduationCap, 
+  MapPin, 
+  CheckCircle2, 
+  AlertCircle
+} from 'lucide-react';
+import { getAcademicGrades, AcademicGrade } from '../../utils/academicGrades';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
-const nameRegex = /^[\u0600-\u06FFa-zA-Z\s]+$/;
-const egyptPhone = /^(010|011|012|015)\d{8}$/;
-const strongPass = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])/;
-
-type Step1Data = { firstName: string; fatherName: string; lastName: string; email: string; phone: string; password: string; confirmPassword: string; };
-type Step2Data = { grade: string; school: string; governorate: string; city: string; birthDate: string; gender: string; educationType: string; };
-type GuardianData = { fullName: string; relation: string; phone: string; altPhone: string; email: string; };
-type Consents = { acceptTerms: boolean; acceptPrivacy: boolean; acceptNotifications: boolean; };
-
-const initStep1: Step1Data = { firstName: '', fatherName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '' };
-const initStep2: Step2Data = { grade: '', school: '', governorate: '', city: '', birthDate: '', gender: '', educationType: '' };
-const initGuardian: GuardianData = { fullName: '', relation: '', phone: '', altPhone: '', email: '' };
-const initConsents: Consents = { acceptTerms: false, acceptPrivacy: false, acceptNotifications: false };
-
-function validateStep1(d: Step1Data): Record<string, string> {
-  const e: Record<string, string> = {};
-  if (!d.firstName || d.firstName.length < 3) e.firstName = 'الاسم الأول لا يقل عن 3 أحرف';
-  else if (!nameRegex.test(d.firstName)) e.firstName = 'الاسم الأول لا يحتوي على أرقام أو رموز';
-  if (!d.fatherName || d.fatherName.length < 3) e.fatherName = 'اسم الأب لا يقل عن 3 أحرف';
-  else if (!nameRegex.test(d.fatherName)) e.fatherName = 'اسم الأب لا يحتوي على أرقام أو رموز';
-  if (!d.lastName || d.lastName.length < 3) e.lastName = 'اسم العائلة لا يقل عن 3 أحرف';
-  else if (!nameRegex.test(d.lastName)) e.lastName = 'اسم العائلة لا يحتوي على أرقام أو رموز';
-  if (!d.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) e.email = 'البريد الإلكتروني غير صالح';
-  if (!d.phone) e.phone = 'رقم الهاتف مطلوب';
-  else if (!egyptPhone.test(d.phone)) e.phone = 'رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 010/011/012/015';
-  if (!d.password || d.password.length < 8) e.password = 'كلمة المرور 8 أحرف على الأقل';
-  else if (!strongPass.test(d.password)) e.password = 'يجب أن تحتوي على حرف كبير وصغير ورقم ورمز';
-  if (d.confirmPassword !== d.password) e.confirmPassword = 'كلمة المرور غير متطابقة';
-  return e;
-}
-
-function validateStep2(d: Step2Data): Record<string, string> {
-  const e: Record<string, string> = {};
-  if (!d.grade) e.grade = 'الصف الدراسي مطلوب';
-  if (!d.educationType) e.educationType = 'نوع التعليم مطلوب';
-  if (!d.governorate) e.governorate = 'المحافظة مطلوبة';
-  if (!d.gender) e.gender = 'الجنس مطلوب';
-  return e;
-}
-
-function validateStep3(g: GuardianData, c: Consents, studentPhone: string): Record<string, string> {
-  const e: Record<string, string> = {};
-  if (!g.fullName || g.fullName.length < 3) e['guardian.fullName'] = 'اسم ولي الأمر لا يقل عن 3 أحرف';
-  else if (!nameRegex.test(g.fullName)) e['guardian.fullName'] = 'الاسم لا يحتوي على أرقام أو رموز';
-  if (!g.relation) e['guardian.relation'] = 'صلة القرابة مطلوبة';
-  if (!g.phone) e['guardian.phone'] = 'رقم هاتف ولي الأمر مطلوب';
-  else if (!egyptPhone.test(g.phone)) e['guardian.phone'] = 'رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 010/011/012/015';
-  else if (g.phone === studentPhone) e['guardian.phone'] = 'رقم ولي الأمر يجب أن يختلف عن رقم الطالب';
-  if (!c.acceptTerms) e.acceptTerms = 'مطلوب';
-  if (!c.acceptPrivacy) e.acceptPrivacy = 'مطلوب';
-  return e;
-}
-
-const STEP_INFO = [
-  { title: 'بيانات الحساب', subtitle: 'أدخل بياناتك الشخصية ومعلومات تسجيل الدخول', color: '#6c63ff' },
-  { title: 'بيانات الطالب', subtitle: 'أدخل معلوماتك الدراسية والشخصية', color: '#f59e0b' },
-  { title: 'بيانات ولي الأمر', subtitle: 'أدخل معلومات ولي الأمر والموافقات المطلوبة', color: '#10b981' },
-];
+const egyptPhoneRegex = /^(010|011|012|015)\d{8}$/;
+const BRAND_BLUE = '#0084FF';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [step1, setStep1] = useState<Step1Data>(initStep1);
-  const [step2, setStep2] = useState<Step2Data>(initStep2);
-  const [guardian, setGuardian] = useState<GuardianData>(initGuardian);
-  const [consents, setConsents] = useState<Consents>(initConsents);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [step, setStep] = useState(0); // 0: Personal, 1: Academic & Security, 2: Guardian & Terms
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const scrollToFirstError = (errs: Record<string, string>) => {
-    const firstKey = Object.keys(errs)[0];
-    if (!firstKey) return;
-    setTimeout(() => {
-      const el = document.querySelector<HTMLElement>(`[name="${firstKey}"]`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el?.focus();
-    }, 50);
-  };
+  // Dynamic Academic Grades from Admin Settings
+  const [availableGrades, setAvailableGrades] = useState<AcademicGrade[]>(() => {
+    const all = getAcademicGrades();
+    const active = all.filter(g => g.active);
+    return active.length > 0 ? active : all;
+  });
 
-  const handleNext = async () => {
-    let errs: Record<string, string> = {};
-    if (step === 0) {
-      errs = validateStep1(step1);
-      if (Object.keys(errs).length === 0) {
-        try {
-          const res = await fetch(`${API}/auth/check-availability`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: step1.email, phone: step1.phone }),
-          });
-          const data = await res.json();
-          if (data.errors && Object.keys(data.errors).length > 0) {
-            setErrors(data.errors);
-            scrollToFirstError(data.errors);
-            return;
-          }
-        } catch {
-          setApiError('حدث خطأ، حاول مرة أخرى');
-          return;
-        }
-      }
-    }
-    if (step === 1) errs = validateStep2(step2);
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) scrollToFirstError(errs);
-    else setStep(s => s + 1);
-  };
+  useEffect(() => {
+    const loadGrades = () => {
+      const all = getAcademicGrades();
+      const active = all.filter(g => g.active);
+      if (active.length > 0) setAvailableGrades(active);
+    };
+    loadGrades();
+    window.addEventListener('academic_grades_updated', loadGrades);
+    return () => window.removeEventListener('academic_grades_updated', loadGrades);
+  }, []);
 
-  const handleSubmit = async () => {
-    const errs = validateStep3(guardian, consents, step1.phone);
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      scrollToFirstError(errs);
-      return;
-    }
-    try {
-      const res = await fetch(`${API}/auth/check-availability`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: guardian.phone }),
+  // Form State
+  const [formData, setFormData] = useState({
+    firstName: '',
+    fatherName: '',
+    grandfatherName: '',
+    lastName: '',
+    phone: '',
+    grade: 'الصف الأول الثانوي',
+    educationType: 'arabic',
+    gender: 'male',
+    governorate: 'القاهرة',
+    city: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    guardianName: '',
+    guardianRelation: 'father',
+    guardianPhone: '',
+    acceptTerms: true,
+    acceptPrivacy: true,
+  });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const updateField = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => {
+        const copy = { ...prev };
+        delete copy[field];
+        return copy;
       });
-      const data = await res.json();
-      if (data.errors?.phone) {
-        const e = { 'guardian.phone': 'رقم هاتف ولي الأمر مستخدم من قبل' };
-        setErrors(e);
-        scrollToFirstError(e);
+    }
+  };
+
+  // Validation
+  const validateStep0 = () => {
+    const errs: Record<string, string> = {};
+    if (!formData.firstName.trim() || formData.firstName.trim().length < 3) {
+      errs.firstName = 'الاسم الأول يجب أن لا يقل عن 3 أحرف';
+    }
+    if (!formData.fatherName.trim() || formData.fatherName.trim().length < 3) {
+      errs.fatherName = 'اسم الأب يجب أن لا يقل عن 3 أحرف';
+    }
+    if (!formData.grandfatherName.trim() || formData.grandfatherName.trim().length < 2) {
+      errs.grandfatherName = 'يرجى إدخال اسم الجد';
+    }
+    if (!formData.lastName.trim() || formData.lastName.trim().length < 3) {
+      errs.lastName = 'اسم العائلة يجب أن لا يقل عن 3 أحرف';
+    }
+    if (!formData.phone.trim()) {
+      errs.phone = 'رقم هاتف الطالب مطلوب';
+    } else if (!egyptPhoneRegex.test(formData.phone.trim())) {
+      errs.phone = 'يجب أن يكون 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015';
+    }
+    return errs;
+  };
+
+  const strongPass = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/;
+
+  const validateStep1 = () => {
+    const errs: Record<string, string> = {};
+    if (!formData.grade) errs.grade = 'يرجى اختيار المرحلة الدراسية';
+    if (!formData.governorate) errs.governorate = 'يرجى اختيار المحافظة';
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      errs.email = 'يرجى إدخال بريد إلكتروني صحيح';
+    }
+    if (!formData.password || formData.password.length < 8) {
+      errs.password = 'كلمة المرور يجب أن لا تقل عن 8 أحرف';
+    } else if (!strongPass.test(formData.password)) {
+      errs.password = 'كلمة المرور يجب أن تحتوي على حرف كبير وصغير ورقم ورمز خاص';
+    }
+    if (formData.password !== formData.confirmPassword) {
+      errs.confirmPassword = 'كلمة المرور وتأكيدها غير متطابقين';
+    }
+    return errs;
+  };
+
+  const validateStep2 = () => {
+    const errs: Record<string, string> = {};
+    if (!formData.guardianName.trim() || formData.guardianName.trim().length < 3) {
+      errs.guardianName = 'يرجى إدخال اسم ولي الأمر كاملاً (3 أحرف على الأقل)';
+    }
+    if (!formData.guardianPhone.trim()) {
+      errs.guardianPhone = 'رقم هاتف ولي الأمر مطلوب';
+    } else if (!egyptPhoneRegex.test(formData.guardianPhone.trim())) {
+      errs.guardianPhone = 'رقم هاتف ولي الأمر غير صحيح (11 رقم)';
+    } else if (formData.guardianPhone.trim() === formData.phone.trim()) {
+      errs.guardianPhone = 'يجب أن يختلف رقم ولي الأمر عن رقم هاتف الطالب';
+    }
+    if (!formData.acceptTerms) {
+      errs.acceptTerms = 'يجب الموافقة على شروط الاستخدام للمتابعة';
+    }
+    return errs;
+  };
+
+  const handleNext = () => {
+    if (step === 0) {
+      const errs = validateStep0();
+      if (Object.keys(errs).length > 0) {
+        setErrors(errs);
         return;
       }
-    } catch {
-      setApiError('حدث خطأ، حاول مرة أخرى');
+      setStep(1);
+    } else if (step === 1) {
+      const errs = validateStep1();
+      if (Object.keys(errs).length > 0) {
+        setErrors(errs);
+        return;
+      }
+      setStep(2);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errs = validateStep2();
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
       return;
     }
 
     setLoading(true);
     setApiError('');
+
+    // Normalize values to exact backend schema expectations
+    let backendGrade = 'grade1';
+    if (formData.grade === 'grade2' || formData.grade.includes('ثاني') || formData.grade.includes('2')) {
+      backendGrade = 'grade2';
+    }
+
+    let backendRelation = 'father';
+    if (formData.guardianRelation === 'mother' || formData.guardianRelation === 'الأم' || formData.guardianRelation === 'ام') {
+      backendRelation = 'mother';
+    } else if (formData.guardianRelation === 'other' || formData.guardianRelation === 'أخرى' || formData.guardianRelation === 'ولي أمر آخر') {
+      backendRelation = 'other';
+    }
+
+    const backendEducationType = (formData.educationType === 'languages' || formData.educationType === 'لغات') ? 'languages' : 'arabic';
+    const backendGender = (formData.gender === 'female' || formData.gender === 'أنثى') ? 'female' : 'male';
+
+    const payload = {
+      firstName: formData.firstName.trim(),
+      fatherName: formData.fatherName.trim(),
+      lastName: formData.lastName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: formData.phone.trim(),
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      grade: backendGrade,
+      governorate: formData.governorate,
+      city: formData.city || formData.governorate,
+      educationType: backendEducationType,
+      gender: backendGender,
+      acceptTerms: true,
+      acceptPrivacy: true,
+      guardian: {
+        fullName: formData.guardianName.trim(),
+        relation: backendRelation,
+        phone: formData.guardianPhone.trim(),
+      },
+    };
+
     try {
       const res = await fetch(`${API}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...step1, ...step2,
-          guardian: {
-            fullName: guardian.fullName, relation: guardian.relation, phone: guardian.phone,
-            ...(guardian.altPhone && { altPhone: guardian.altPhone }),
-            ...(guardian.email && { email: guardian.email }),
-          },
-          acceptTerms: String(consents.acceptTerms),
-          acceptPrivacy: String(consents.acceptPrivacy),
-          acceptNotifications: consents.acceptNotifications,
-        }),
+        credentials: 'include',
+        body: JSON.stringify(payload),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'حدث خطأ، حاول مرة أخرى');
-      router.push('/login');
+      if (res.ok) {
+        if (data.data?.accessToken) {
+          localStorage.setItem('accessToken', data.data.accessToken);
+        }
+        document.cookie = 'student_token=active; path=/; max-age=2592000; SameSite=Strict;';
+
+        const studentProfile = {
+          name: `${formData.firstName} ${formData.fatherName} ${formData.lastName}`.trim(),
+          email: formData.email,
+          phone: formData.phone,
+          grade: backendGrade,
+          city: formData.city || formData.governorate,
+          governorate: formData.governorate,
+        };
+        try {
+          localStorage.setItem('student_profile_info', JSON.stringify(studentProfile));
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('student_profile_updated'));
+        }
+        router.push('/dashboard');
+      } else {
+        let msg = data.message || 'فشل إنشاء الحساب، يرجى التحقق من صحة البيانات';
+        if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          msg = data.errors.map((item: any) => item.msg || item.message).join(' | ');
+        }
+        setApiError(msg);
+      }
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'حدث خطأ، حاول مرة أخرى');
+      setApiError(err instanceof Error ? err.message : 'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
     } finally {
       setLoading(false);
     }
   };
 
-  const isStep3Valid = consents.acceptTerms && consents.acceptPrivacy &&
-    guardian.fullName && guardian.relation && guardian.phone;
+  const stepInfo = [
+    { label: 'الخطوة الأولى', percent: 30, title: 'أنشئ حسابك الآن :', subtitle: 'ادخل بياناتك بشكل صحيح للحصول علي افضل تجربة داخل الموقع' },
+    { label: 'الخطوة الثانية', percent: 65, title: 'المرحلة الدراسية والأمان :', subtitle: 'حدد صفك الدراسي وكلمة المرور لتأمين حسابك والوصول لمحتواك' },
+    { label: 'الخطوة الثالثة', percent: 100, title: 'بيانات ولي الأمر والموافقة :', subtitle: 'بيانات التواصل مع ولي الأمر لمتابعة التقارير ومستوى التقدم' }
+  ];
 
-  const progress = ((step) / 3) * 100;
+  const currentInfo = stepInfo[step];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', direction: 'rtl', background: '#f8f9fa', fontFamily: 'Tajawal, sans-serif' }}>
-      {/* Right Side (Visual) - Hidden on Mobile */}
-      <div className="auth-visual-side">
-        <Image src="/hero1.webp" alt="Background" fill style={{ objectFit: 'cover' }} priority />
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, rgba(15,10,50,0.9) 0%, rgba(108,34,249,0.7) 100%)',
-        }} />
-        <div style={{
-          position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column',
-          justifyContent: 'center', height: '100%', padding: '60px', color: '#fff'
-        }}>
-          <h2 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 900, marginBottom: 24, lineHeight: 1.3 }}>
-            انضم إلينا<br />وابدأ رحلة التفوق
-          </h2>
-          <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.8)', lineHeight: 1.8, maxWidth: 500 }}>
-            خطوة واحدة تفصلك عن الانضمام لآلاف الطلاب على المنصة الأولى لتعلم البرمجة والذكاء الاصطناعي للمرحلة الثانوية.
-          </p>
-        </div>
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      width: '100%',
+      background: '#ffffff',
+      fontFamily: 'Tajawal, sans-serif',
+      direction: 'rtl',
+      display: 'flex',
+      alignItems: 'stretch',
+      justifyContent: 'center',
+      padding: '16px',
+      boxSizing: 'border-box'
+    }}>
+      <style jsx global>{`
+        @media (min-width: 1024px) {
+          .lg\\:h-full {
+            height: 100%;
+          }
+        }
+        .rounded-xl {
+          border-radius: 0.75rem;
+        }
+        @media (max-width: 1023px) {
+          .register-split-wrapper {
+            grid-template-columns: 1fr !important;
+          }
+          .register-visual-side {
+            display: none !important;
+          }
+        }
+      `}</style>
 
-      {/* Left Side (Form) */}
-      <div className="auth-form-side">
-        <div className="form-container">
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <Link href="/" style={{ display: 'inline-block', marginBottom: 16 }}>
-              <Image src="/Logo-cropped.png" alt="Logo" width={340} height={76} style={{ objectFit: 'contain' }} />
-            </Link>
-            <h1 style={{ fontSize: 24, fontWeight: 900, color: '#16133a', marginBottom: 8 }}>إنشاء حساب جديد ✨</h1>
-          </div>
-          
-          <div style={{ width: '100%' }}>
-        {/* Header Card */}
-        <div style={{
-          background: `linear-gradient(135deg, ${STEP_INFO[step].color}15, ${STEP_INFO[step].color}08)`,
-          border: `1.5px solid ${STEP_INFO[step].color}30`,
-          borderRadius: 20, padding: '20px 24px', marginBottom: 20,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          transition: 'all .4s',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <HiAcademicCap size={18} color={STEP_INFO[step].color} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: STEP_INFO[step].color }}>
-                الخطوة {step + 1} من 3
+      {/* Main Container - Full Width & Height Split without empty side gutters */}
+      <div 
+        className="register-split-wrapper"
+        style={{
+          width: '100%',
+          minHeight: 'calc(100vh - 32px)',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 20,
+          alignItems: 'stretch',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* RIGHT SIDE (in RTL): Registration Form Card */}
+        <motion.div
+          initial={{ opacity: 0, x: 15 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+          className="rounded-xl lg:h-full"
+          style={{
+            background: '#f3f4f6',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.04)',
+            padding: 'clamp(32px, 4vw, 56px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            boxSizing: 'border-box',
+            width: '100%',
+            height: '100%'
+          }}
+        >
+          {/* Inner Content - Spacious and filling available width */}
+          <div style={{ width: '100%', maxWidth: 760 }}>
+          {/* Top Progress Bar */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ color: BRAND_BLUE, fontWeight: 800, fontSize: 14.5 }}>
+                {currentInfo.label}
+              </span>
+              <span style={{ color: '#6b7280', fontWeight: 700, fontSize: 13.5 }}>
+                {currentInfo.percent}%
               </span>
             </div>
-            <h1 style={{ fontSize: 'clamp(18px, 2.5vw, 22px)', fontWeight: 900, color: 'var(--text-main)', marginBottom: 2 }}>
-              {STEP_INFO[step].title}
+            <div style={{ width: '100%', height: 3.5, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{
+                width: `${currentInfo.percent}%`,
+                height: '100%',
+                background: BRAND_BLUE,
+                borderRadius: 4,
+                transition: 'width 0.4s ease'
+              }} />
+            </div>
+          </div>
+
+          {/* Centered Brand Logo */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+            <Link href="/">
+              <img 
+                src="/Logo-cropped.png" 
+                alt="Logo" 
+                style={{ maxHeight: 92, maxWidth: 300, objectFit: 'contain' }} 
+              />
+            </Link>
+          </div>
+
+          {/* Title & Subtitle */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <h1 style={{ fontSize: 'clamp(24px, 2.5vw, 30px)', fontWeight: 900, color: '#111827', margin: '0 0 8px' }}>
+              {currentInfo.title}
             </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{STEP_INFO[step].subtitle}</p>
+            <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>
+              {currentInfo.subtitle}
+            </p>
           </div>
-          <div style={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: `${STEP_INFO[step].color}18`,
-            border: `2px solid ${STEP_INFO[step].color}40`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, flexShrink: 0,
-          }}>
-            {['👤', '🎓', '👨‍👦'][step]}
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div style={{ height: 5, background: 'var(--border)', borderRadius: 10, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 10,
-            background: `linear-gradient(90deg, ${STEP_INFO[step].color}, ${STEP_INFO[step].color}aa)`,
-            width: `${progress + 33}%`, transition: 'width .5s cubic-bezier(.4,0,.2,1)',
-          }} />
-        </div>
-
-        {/* Main Card */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 24,
-          boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
-          padding: 'clamp(20px, 3vw, 36px)',
-        }}>
-          <Stepper current={step} />
-
-          {step === 0 && <Step1Account data={step1} errors={errors} onChange={(f, v) => setStep1(p => ({ ...p, [f]: v }))} />}
-          {step === 1 && <Step2Student data={step2} errors={errors} onChange={(f, v) => setStep2(p => ({ ...p, [f]: v }))} />}
-          {step === 2 && (
-            <Step3Guardian
-              guardian={guardian} consents={consents} errors={errors} studentPhone={step1.phone}
-              onGuardianChange={(f, v) => setGuardian(p => ({ ...p, [f]: v }))}
-              onConsentChange={(f, v) => setConsents(p => ({ ...p, [f]: v }))}
-            />
-          )}
 
           {apiError && (
             <div style={{
-              marginTop: 16, padding: '12px 16px', borderRadius: 12,
-              background: '#fff1f1', border: '1.5px solid #fca5a5',
-              color: 'var(--danger)', fontSize: 14, fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 8,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
+              padding: '12px 16px',
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              marginBottom: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
             }}>
-              <span style={{ fontSize: 18 }}>⚠️</span> {apiError}
+              <AlertCircle size={16} /> {apiError}
             </div>
           )}
 
-          {/* Navigation */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 28, flexDirection: 'row-reverse' }}>
-            {step < 2 ? (
-              <button onClick={handleNext}
-                style={{
-                  flex: 1, padding: '13px 20px',
-                  background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-                  color: '#fff', border: 'none', borderRadius: 14,
-                  fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  boxShadow: '0 4px 16px rgba(108,99,255,0.35)',
-                  fontFamily: 'Tajawal, sans-serif', transition: 'all .2s',
-                }}>
-                التالي <FiArrowLeft size={17} />
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={loading || !isStep3Valid}
-                style={{
-                  flex: 1, padding: '13px 20px',
-                  background: loading || !isStep3Valid
-                    ? '#d1d5db'
-                    : 'linear-gradient(135deg, var(--success), #059669)',
-                  color: '#fff', border: 'none', borderRadius: 14,
-                  fontSize: 15, fontWeight: 800,
-                  cursor: loading || !isStep3Valid ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  boxShadow: loading || !isStep3Valid ? 'none' : '0 4px 16px rgba(16,185,129,0.35)',
-                  fontFamily: 'Tajawal, sans-serif', transition: 'all .2s',
-                }}>
-                {loading ? (
-                  <>
-                    <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                    جاري الإنشاء...
-                  </>
-                ) : (
-                  <><FiCheckCircle size={18} /> إنشاء الحساب</>
-                )}
-              </button>
-            )}
-            {step > 0 && (
-              <button onClick={() => { setStep(s => s - 1); setErrors({}); }}
-                style={{
-                  flex: 1, padding: '13px 20px',
-                  background: 'var(--surface)', color: 'var(--primary)',
-                  border: '2px solid var(--primary)', borderRadius: 14,
-                  fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  fontFamily: 'Tajawal, sans-serif', transition: 'all .2s',
-                }}>
-                <FiArrowRight size={17} /> السابق
-              </button>
-            )}
-          </div>
+          {/* Form Body */}
+          <form onSubmit={step === 2 ? handleSubmit : (e) => { e.preventDefault(); handleNext(); }}>
+            <AnimatePresence mode="wait">
+              
+              {/* STEP 1: Personal Names & Phone */}
+              {step === 0 && (
+                <motion.div
+                  key="step-0"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.25 }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 26 }}
+                >
+                  {/* Row 1: First Name & Father Name */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="الاسم الأول"
+                          value={formData.firstName}
+                          onChange={(e) => updateField('firstName', e.target.value)}
+                          style={underlinedInputStyle(!!errors.firstName)}
+                        />
+                        <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                      {errors.firstName && <span style={errorTextStyle}>⚠ {errors.firstName}</span>}
+                    </div>
 
-          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-muted)' }}>
-            عندك حساب بالفعل؟{' '}
-            <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 800, textDecoration: 'none' }}>
-              سجل دخول ←
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="الاسم الثاني (اسم الأب)"
+                          value={formData.fatherName}
+                          onChange={(e) => updateField('fatherName', e.target.value)}
+                          style={underlinedInputStyle(!!errors.fatherName)}
+                        />
+                        <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                      {errors.fatherName && <span style={errorTextStyle}>⚠ {errors.fatherName}</span>}
+                    </div>
+                  </div>
+
+                  {/* Row 2: Grandfather Name & Last Name */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="الاسم الثالث (اسم الجد)"
+                          value={formData.grandfatherName}
+                          onChange={(e) => updateField('grandfatherName', e.target.value)}
+                          style={underlinedInputStyle(!!errors.grandfatherName)}
+                        />
+                        <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                      {errors.grandfatherName && <span style={errorTextStyle}>⚠ {errors.grandfatherName}</span>}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="الاسم الأخير (العائلة)"
+                          value={formData.lastName}
+                          onChange={(e) => updateField('lastName', e.target.value)}
+                          style={underlinedInputStyle(!!errors.lastName)}
+                        />
+                        <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                      {errors.lastName && <span style={errorTextStyle}>⚠ {errors.lastName}</span>}
+                    </div>
+                  </div>
+
+                  {/* Row 3: Student Phone */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="tel"
+                        placeholder="رقم الهاتف (الواتساب)"
+                        value={formData.phone}
+                        onChange={(e) => updateField('phone', e.target.value)}
+                        style={underlinedInputStyle(!!errors.phone)}
+                      />
+                      <Phone size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                    </div>
+                    {errors.phone && <span style={errorTextStyle}>⚠ {errors.phone}</span>}
+                  </div>
+
+                  {/* Next Button */}
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    style={mainPurpleBtnStyle}
+                  >
+                    التالي
+                  </button>
+                </motion.div>
+              )}
+
+              {/* STEP 1: Academic Grade & Credentials */}
+              {step === 1 && (
+                <motion.div
+                  key="step-1"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.25 }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 26 }}
+                >
+                  {/* Grade Selection */}
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, display: 'block' }}>
+                      اختر سنتك الدراسية الحالية:
+                    </label>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: availableGrades.length <= 2 ? '1fr 1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+                      gap: 16
+                    }}>
+                      {availableGrades.map(g => {
+                        const isSelected = formData.grade === g.name;
+                        return (
+                          <div
+                            key={g.id}
+                            onClick={() => updateField('grade', g.name)}
+                            style={{
+                              padding: '16px 18px',
+                              borderRadius: 14,
+                              cursor: 'pointer',
+                              border: isSelected ? `2px solid ${BRAND_BLUE}` : '1.5px solid #d1d5db',
+                              background: isSelected ? 'rgba(0, 132, 255, 0.08)' : '#ffffff',
+                              textAlign: 'center',
+                              transition: 'all 0.2s',
+                              boxShadow: isSelected ? '0 4px 14px rgba(0, 132, 255, 0.12)' : 'none'
+                            }}
+                          >
+                            <div style={{ fontSize: 15.5, fontWeight: 900, color: isSelected ? BRAND_BLUE : '#111827' }}>
+                              {g.name}
+                            </div>
+                            <div style={{ fontSize: 12.5, color: isSelected ? BRAND_BLUE : '#6b7280', marginTop: 3 }}>
+                              {g.subtitle || 'مرحلة دراسية 🎓'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {errors.grade && <span style={errorTextStyle}>⚠ {errors.grade}</span>}
+                  </div>
+
+                  {/* Governorate & City */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <select
+                          value={formData.governorate}
+                          onChange={(e) => updateField('governorate', e.target.value)}
+                          style={{ ...underlinedInputStyle(false), cursor: 'pointer' }}
+                        >
+                          {['القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'القليوبية', 'الغربية', 'المنوفية', 'البحيرة', 'كفر الشيخ', 'الفيوم', 'بني سويف', 'المنيا', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'بورسعيد', 'الإسماعيلية', 'السويس', 'دمياط', 'شمال سيناء', 'جنوب سيناء', 'البحر الأحمر', 'الوادي الجديد', 'مطروح'].map(gov => (
+                            <option key={gov} value={gov}>{gov}</option>
+                          ))}
+                        </select>
+                        <MapPin size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="المدينة / المركز (اختياري)"
+                          value={formData.city}
+                          onChange={(e) => updateField('city', e.target.value)}
+                          style={underlinedInputStyle(false)}
+                        />
+                        <MapPin size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="email"
+                        placeholder="البريد الإلكتروني"
+                        value={formData.email}
+                        onChange={(e) => updateField('email', e.target.value)}
+                        style={underlinedInputStyle(!!errors.email)}
+                      />
+                      <Mail size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                    </div>
+                    {errors.email && <span style={errorTextStyle}>⚠ {errors.email}</span>}
+                  </div>
+
+                  {/* Password & Confirm */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="كلمة المرور"
+                          value={formData.password}
+                          onChange={(e) => updateField('password', e.target.value)}
+                          style={underlinedInputStyle(!!errors.password)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{ position: 'absolute', left: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center' }}
+                        >
+                          {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                        </button>
+                      </div>
+                      {errors.password && <span style={errorTextStyle}>⚠ {errors.password}</span>}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          placeholder="تأكيد كلمة المرور"
+                          value={formData.confirmPassword}
+                          onChange={(e) => updateField('confirmPassword', e.target.value)}
+                          style={underlinedInputStyle(!!errors.confirmPassword)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          style={{ position: 'absolute', left: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center' }}
+                        >
+                          {showConfirmPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                        </button>
+                      </div>
+                      {errors.confirmPassword && <span style={errorTextStyle}>⚠ {errors.confirmPassword}</span>}
+                    </div>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => setStep(0)}
+                      style={secondaryBtnStyle}
+                    >
+                      السابق
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      style={{ ...mainPurpleBtnStyle, flex: 2 }}
+                    >
+                      التالي
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* STEP 2: Guardian Details & Consent */}
+              {step === 2 && (
+                <motion.div
+                  key="step-2"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.25 }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 26 }}
+                >
+                    {/* Guardian Name */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="اسم ولي الأمر كاملاً"
+                        value={formData.guardianName}
+                        onChange={(e) => updateField('guardianName', e.target.value)}
+                        style={underlinedInputStyle(!!errors.guardianName)}
+                      />
+                      <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                    </div>
+                    {errors.guardianName && <span style={errorTextStyle}>⚠ {errors.guardianName}</span>}
+                  </div>
+
+                  {/* Relation & Phone */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <select
+                          value={formData.guardianRelation}
+                          onChange={(e) => updateField('guardianRelation', e.target.value)}
+                          style={{ ...underlinedInputStyle(false), cursor: 'pointer' }}
+                        >
+                          <option value="الأب">صلة القرابة: الأب</option>
+                          <option value="الأم">صلة القرابة: الأم</option>
+                          <option value="الأخ الأكبر">صلة القرابة: الأخ الأكبر</option>
+                          <option value="ولي أمر آخر">صلة القرابة: ولي أمر آخر</option>
+                        </select>
+                        <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="tel"
+                          placeholder="رقم هاتف ولي الأمر"
+                          value={formData.guardianPhone}
+                          onChange={(e) => updateField('guardianPhone', e.target.value)}
+                          style={underlinedInputStyle(!!errors.guardianPhone)}
+                        />
+                        <Phone size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
+                      </div>
+                      {errors.guardianPhone && <span style={errorTextStyle}>⚠ {errors.guardianPhone}</span>}
+                    </div>
+                  </div>
+
+                  {/* Terms Agreement */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#374151', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.acceptTerms}
+                        onChange={(e) => updateField('acceptTerms', e.target.checked)}
+                        style={{ accentColor: '#7c3aed', width: 18, height: 18, cursor: 'pointer' }}
+                      />
+                      أوافق على كافة الشروط وسياسة الخصوصية الخاصة بالمنصة
+                    </label>
+                    {errors.acceptTerms && <span style={errorTextStyle}>⚠ {errors.acceptTerms}</span>}
+                  </div>
+
+                  {/* Navigation & Submit Buttons */}
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      style={secondaryBtnStyle}
+                    >
+                      السابق
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      style={{ ...mainPurpleBtnStyle, flex: 2 }}
+                    >
+                      {loading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب الآن 🚀'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </form>
+
+          {/* Bottom Link to Login */}
+          <p style={{ textAlign: 'center', marginTop: 32, fontSize: 14, color: '#4b5563', margin: '32px 0 0' }}>
+            يوجد لديك حساب بالفعل؟{' '}
+            <Link href="/login" style={{ color: BRAND_BLUE, fontWeight: 800, textDecoration: 'none' }}>
+              ادخل إلى حسابك الآن !
             </Link>
           </p>
-        </div>
-        </div>
-        </div>
-      </div>
 
-      <style>{`
-        .auth-visual-side { display: none; position: relative; overflow: hidden; }
-        .auth-form-side { width: 100%; display: flex; justify-content: center; padding: 24px; max-height: 100vh; overflow-y: auto; background: #f8f9fa; }
-        .form-container { width: 100%; max-width: 500px; padding: 20px 0; }
-        @media (min-width: 1024px) {
-          .auth-visual-side { display: block; flex: 1; }
-          .auth-form-side { width: 600px; padding: 40px; }
-        }
-        @media (min-width: 1280px) {
-          .auth-form-side { width: 680px; }
-          .form-container { max-width: 560px; }
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+          </div>
+        </motion.div>
+
+        {/* LEFT SIDE (in RTL): Visual Image Card */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="register-visual-side rounded-xl lg:h-full"
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.05)',
+            background: '#ffffff',
+            minHeight: 'calc(100vh - 32px)'
+          }}
+        >
+          <Image
+            src="/hero1.webp"
+            alt="Abdelrahman Hamed - Programming & AI"
+            fill
+            style={{ objectFit: 'cover' }}
+            priority
+          />
+        </motion.div>
+
+      </div>
     </div>
   );
 }
+
+// Consistent styles matching user request
+const underlinedInputStyle = (hasError: boolean): React.CSSProperties => ({
+  width: '100%',
+  border: 'none',
+  borderBottom: `1.5px solid ${hasError ? '#ef4444' : '#d1d5db'}`,
+  borderRadius: 0,
+  background: 'transparent',
+  padding: '14px 14px 14px 44px',
+  textAlign: 'right',
+  direction: 'rtl',
+  fontSize: 15.5,
+  fontWeight: 700,
+  color: '#111827',
+  outline: 'none',
+  transition: 'border-color 0.2s',
+  fontFamily: 'Tajawal, sans-serif',
+  boxSizing: 'border-box'
+});
+
+const errorTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#ef4444',
+  fontWeight: 700
+};
+
+const mainPurpleBtnStyle: React.CSSProperties = {
+  width: '100%',
+  background: '#7c3aed',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: 12,
+  padding: '15px 20px',
+  fontSize: 16.5,
+  fontWeight: 900,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+  boxShadow: '0 4px 16px rgba(124, 58, 237, 0.3)',
+  fontFamily: 'Tajawal, sans-serif'
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  flex: 1,
+  background: '#f3f4f6',
+  color: '#374151',
+  border: '1px solid #e5e7eb',
+  borderRadius: 12,
+  padding: '15px 20px',
+  fontSize: 15,
+  fontWeight: 800,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+  fontFamily: 'Tajawal, sans-serif'
+};

@@ -50,10 +50,11 @@ const loginMember = async ({ email, password }) => {
   }
   if (!member.isActive) throw new AppError('الحساب غير نشط', 401);
 
-  const accessToken = generateAccessToken(member._id, 'assistant');
-  const refreshToken = generateRefreshToken(member._id);
+  const accessToken = generateAccessToken(member._id, member.role || 'assistant', { type: 'team_member' });
+  const refreshToken = generateRefreshToken(member._id, { type: 'team_member' });
 
   member.refreshTokens = [...(member.refreshTokens || []).slice(-4), refreshToken];
+  member.markModified('refreshTokens');
   await member.save({ validateBeforeSave: false });
 
   return { member, accessToken, refreshToken };

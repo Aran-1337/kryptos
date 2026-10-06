@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 export default function Footer() {
   const pathname = usePathname();
 
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.includes('/watch')) {
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.includes('/watch') || pathname.startsWith('/register') || pathname.startsWith('/login')) {
     return null;
   }
 

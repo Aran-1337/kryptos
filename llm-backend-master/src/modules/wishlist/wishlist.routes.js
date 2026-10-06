@@ -6,6 +6,14 @@ const { sendResponse } = require('../../utils/response');
 const { protect } = require('../../middlewares/auth.middleware');
 const AppError = require('../../utils/AppError');
 
+const { param } = require('express-validator');
+const validate = require('../../middlewares/validate.middleware');
+
+const courseIdParamValidator = [
+  param('courseId').isMongoId().withMessage('معرف الكورس غير صالح'),
+  validate,
+];
+
 router.use(protect);
 
 router.get('/', catchAsync(async (req, res) => {
@@ -13,7 +21,7 @@ router.get('/', catchAsync(async (req, res) => {
   sendResponse(res, 200, { wishlist: user.wishlist });
 }));
 
-router.post('/:courseId', catchAsync(async (req, res) => {
+router.post('/:courseId', courseIdParamValidator, catchAsync(async (req, res) => {
   const course = await Course.findById(req.params.courseId);
   if (!course) throw new AppError('الكورس غير موجود', 404);
 
@@ -26,7 +34,7 @@ router.post('/:courseId', catchAsync(async (req, res) => {
   sendResponse(res, 200, {}, 'تم إضافة الكورس إلى قائمة الرغبات');
 }));
 
-router.delete('/:courseId', catchAsync(async (req, res) => {
+router.delete('/:courseId', courseIdParamValidator, catchAsync(async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { $pull: { wishlist: req.params.courseId } });
   sendResponse(res, 200, {}, 'تم إزالة الكورس من قائمة الرغبات');
 }));

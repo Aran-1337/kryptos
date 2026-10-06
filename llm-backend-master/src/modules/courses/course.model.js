@@ -61,7 +61,10 @@ courseSchema.virtual('effectivePrice').get(function () {
   return this.price;
 });
 
-courseSchema.index({ title: 'text', description: 'text', tags: 'text' });
+courseSchema.index(
+  { title: 'text', description: 'text', tags: 'text' },
+  { default_language: 'none', language_override: 'none' }
+);
 courseSchema.index({ category: 1, level: 1, language: 1, price: 1 });
 
 module.exports = mongoose.model('Course', courseSchema);

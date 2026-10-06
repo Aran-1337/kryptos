@@ -3,14 +3,32 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../../services/clo
 const AppError = require('../../utils/AppError');
 const { paginate, paginateResponse } = require('../../helpers/pagination');
 
+const { escapeRegex } = require('../../utils/sanitize');
+
 const getProfile = (userId) => userRepo.findById(userId)
   .populate('enrolledCourses', 'title thumbnail slug')
   .populate('certificates', 'certificateId issuedAt')
   .populate('wishlist', 'title thumbnail slug price');
 
 const updateProfile = async (userId, data) => {
-  const allowed = ['name', 'phone', 'country'];
-  const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
+  const allowed = [
+    'firstName', 'fatherName', 'lastName', 'name', 'phone',
+    'school', 'governorate', 'city', 'educationType', 'gender',
+    'guardian', 'acceptNotifications'
+  ];
+  const filtered = Object.fromEntries(
+    Object.entries(data).filter(([k]) => allowed.includes(k))
+  );
+
+  // If name parts provided, recompute full name
+  if (filtered.firstName || filtered.fatherName || filtered.lastName) {
+    const existing = await userRepo.findById(userId);
+    const first = filtered.firstName || existing?.firstName || '';
+    const father = filtered.fatherName || existing?.fatherName || '';
+    const last = filtered.lastName || existing?.lastName || '';
+    filtered.name = `${first} ${father} ${last}`.trim();
+  }
+
   return userRepo.updateById(userId, filtered);
 };
 
@@ -35,11 +53,16 @@ const uploadAvatar = async (userId, file) => {
 const getAllUsers = async (query) => {
   const { page, limit, skip } = paginate(query);
   const filter = {};
-  if (query.role) filter.role = query.role;
-  if (query.search) filter.$or = [
-    { name: { $regex: query.search, $options: 'i' } },
-    { email: { $regex: query.search, $options: 'i' } },
-  ];
+  if (query.role && typeof query.role === 'string') filter.role = query.role.trim();
+  if (query.search && typeof query.search === 'string') {
+    const escaped = escapeRegex(query.search.trim());
+    if (escaped) {
+      filter.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+  }
 
   const [users, total] = await Promise.all([
     userRepo.findAll(filter, { skip, limit, sort: { createdAt: -1 } }),

@@ -78,27 +78,37 @@ const registerValidator = [
 ];
 
 const loginValidator = [
-  body('password').notEmpty().withMessage('كلمة المرور مطلوبة'),
+  body('password').isString().withMessage('كلمة المرور يجب أن تكون نصاً').notEmpty().withMessage('كلمة المرور مطلوبة'),
   body().custom((value, { req }) => {
     if (!req.body.phone && !req.body.email) {
       throw new Error('البريد الإلكتروني أو رقم الهاتف مطلوب');
+    }
+    if (req.body.email !== undefined && typeof req.body.email !== 'string') {
+      throw new Error('البريد الإلكتروني يجب أن يكون نصاً صالحاً');
+    }
+    if (req.body.phone !== undefined && typeof req.body.phone !== 'string') {
+      throw new Error('رقم الهاتف يجب أن يكون نصاً صالحاً');
     }
     return true;
   }),
 ];
 
 const forgotPasswordValidator = [
-  body('email').isEmail().withMessage('البريد الإلكتروني غير صالح').normalizeEmail(),
+  body('email').isString().withMessage('البريد الإلكتروني يجب أن يكون نصاً')
+    .isEmail().withMessage('البريد الإلكتروني غير صالح').normalizeEmail(),
 ];
 
 const resetPasswordValidator = [
-  body('password').isLength({ min: 8 }).withMessage('كلمة المرور 8 أحرف على الأقل')
+  body('password').isString().withMessage('كلمة المرور يجب أن تكون نصاً')
+    .isLength({ min: 8 }).withMessage('كلمة المرور 8 أحرف على الأقل')
     .matches(strongPass).withMessage('كلمة المرور يجب أن تحتوي على حرف كبير وصغير ورقم ورمز'),
 ];
 
 const changePasswordValidator = [
-  body('currentPassword').notEmpty().withMessage('كلمة المرور الحالية مطلوبة'),
-  body('newPassword').isLength({ min: 8 }).withMessage('كلمة المرور الجديدة 8 أحرف على الأقل')
+  body('currentPassword').isString().withMessage('كلمة المرور الحالية يجب أن تكون نصاً')
+    .notEmpty().withMessage('كلمة المرور الحالية مطلوبة'),
+  body('newPassword').isString().withMessage('كلمة المرور الجديدة يجب أن تكون نصاً')
+    .isLength({ min: 8 }).withMessage('كلمة المرور الجديدة 8 أحرف على الأقل')
     .matches(strongPass).withMessage('كلمة المرور يجب أن تحتوي على حرف كبير وصغير ورقم ورمز'),
 ];
 

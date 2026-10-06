@@ -3,11 +3,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { FiEye, FiEyeOff } from 'react-icons/fi';
-import { RiUserLine, RiLockPasswordLine, RiLoginCircleLine } from 'react-icons/ri';
 import { motion } from 'framer-motion';
+import { User, Lock, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const BRAND_BLUE = '#0084FF';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,25 +44,28 @@ export default function LoginPage() {
     setApiError('');
 
     try {
+      const cleanId = form.identifier.trim();
+      const egyptPhoneRegex = /^(010|011|012|015)\d{8}$/;
+      const loginPayload = egyptPhoneRegex.test(cleanId)
+        ? { phone: cleanId, password: form.password }
+        : { email: cleanId, password: form.password };
+
       const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ identifier: form.identifier, password: form.password }),
+        body: JSON.stringify(loginPayload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'بيانات الدخول غير صحيحة');
-      localStorage.setItem('accessToken', data.data.accessToken);
-      document.cookie = 'student_token=active; path=/; max-age=2592000;';
+      if (!res.ok) {
+        throw new Error(data.message || 'البريد الإلكتروني/رقم الهاتف أو كلمة المرور غير صحيحة');
+      }
+      if (data.data?.accessToken) {
+        localStorage.setItem('accessToken', data.data.accessToken);
+      }
+      document.cookie = 'student_token=active; path=/; max-age=2592000; SameSite=Strict;';
       router.push(data.data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err: unknown) {
-      // Client Demo Login Fallback for instant testing
-      if (form.identifier.trim().length > 0) {
-        document.cookie = 'student_token=demo_active; path=/; max-age=2592000;';
-        localStorage.setItem('student_auth', '1');
-        router.push('/dashboard');
-        return;
-      }
       setApiError(err instanceof Error ? err.message : 'حدث خطأ، حاول مرة أخرى');
     } finally {
       setLoading(false);
@@ -70,188 +73,262 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', direction: 'rtl', background: '#fff', fontFamily: 'Tajawal, sans-serif' }}>
-      {/* Right Side (Visual) - Hidden on Mobile */}
-      <div className="auth-visual-side">
-        <Image src="/hero1.webp" alt="Background" fill style={{ objectFit: 'cover' }} priority />
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, rgba(15,10,50,0.9) 0%, rgba(108,34,249,0.7) 100%)',
-        }} />
-        <div style={{
-          position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column',
-          justifyContent: 'center', height: '100%', padding: '60px', color: '#fff'
-        }}>
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-            <h2 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 900, marginBottom: 24, lineHeight: 1.3 }}>
-              رحلتك نحو الاحتراف<br />تبدأ من هنا
-            </h2>
-            <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.8)', lineHeight: 1.8, maxWidth: 500 }}>
-              انضم لآلاف الطلاب وابدأ في تعلم البرمجة والذكاء الاصطناعي على أول منصة تعليمية متكاملة مصممة خصيصاً لمستقبلك.
-            </p>
-          </motion.div>
-        </div>
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      width: '100%',
+      background: '#ffffff',
+      fontFamily: 'Tajawal, sans-serif',
+      direction: 'rtl',
+      display: 'flex',
+      alignItems: 'stretch',
+      justifyContent: 'center',
+      padding: '16px',
+      boxSizing: 'border-box'
+    }}>
+      <style jsx global>{`
+        @media (min-width: 1024px) {
+          .lg\\:h-full {
+            height: 100%;
+          }
+        }
+        .rounded-xl {
+          border-radius: 0.75rem;
+        }
+        @media (max-width: 1023px) {
+          .login-split-wrapper {
+            grid-template-columns: 1fr !important;
+          }
+          .login-visual-side {
+            display: none !important;
+          }
+        }
+      `}</style>
 
-      {/* Left Side (Form) */}
-      <div className="auth-form-side">
-        <motion.div 
-          className="form-container"
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+      {/* Main Container - Full Width & Height Split without empty side gutters */}
+      <div 
+        className="login-split-wrapper"
+        style={{
+          width: '100%',
+          minHeight: 'calc(100vh - 32px)',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 20,
+          alignItems: 'stretch',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* RIGHT SIDE (in RTL): Login Form Card */}
+        <motion.div
+          initial={{ opacity: 0, x: 15 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+          className="rounded-xl lg:h-full"
+          style={{
+            background: '#f3f4f6',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.04)',
+            padding: 'clamp(32px, 4vw, 56px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            boxSizing: 'border-box',
+            width: '100%',
+            height: '100%'
+          }}
         >
-          <div style={{ textAlign: 'center', marginBottom: 40 }}>
-            <Link href="/" style={{ display: 'inline-block', marginBottom: 24 }}>
-              <Image src="/Logo-cropped.png" alt="Logo" width={340} height={76} style={{ objectFit: 'contain' }} />
+          <div style={{ width: '100%', maxWidth: 760 }}>
+          {/* Centered Brand Logo */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+            <Link href="/">
+              <img 
+                src="/Logo-cropped.png" 
+                alt="Logo" 
+                style={{ maxHeight: 92, maxWidth: 300, objectFit: 'contain' }} 
+              />
             </Link>
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#16133a', marginBottom: 8 }}>مرحباً بك مجدداً 👋</h1>
-            <p style={{ color: '#6b7280', fontSize: 15 }}>سجّل دخولك برقم الهاتف أو البريد الإلكتروني</p>
           </div>
 
-          <form onSubmit={handleSubmit} noValidate>
+          {/* Title & Subtitle */}
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <h1 style={{ fontSize: 'clamp(24px, 2.5vw, 30px)', fontWeight: 900, color: '#111827', margin: '0 0 8px' }}>
+              تسجيل الدخول إلى حسابك 👋
+            </h1>
+            <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>
+              ادخل رقم هاتفك أو بريدك الإلكتروني لمتابعة حصصك وكورساتك
+            </p>
+          </div>
+
+          {apiError && (
+            <div style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
+              padding: '12px 16px',
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              marginBottom: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              <AlertCircle size={16} /> {apiError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
             {/* Phone or Email Input */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 700, color: '#16133a' }}>
-                رقم الهاتف أو البريد الإلكتروني
-              </label>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   type="text"
                   value={form.identifier}
                   onChange={e => handleIdentifierChange(e.target.value)}
                   onFocus={() => setFocused('identifier')}
                   onBlur={() => setFocused(null)}
-                  placeholder="مثال: 01012345678 أو ahmed@example.com"
+                  placeholder="رقم الهاتف أو البريد الإلكتروني"
                   style={{
-                    width: '100%', padding: '16px 16px 16px 48px',
-                    border: `2px solid ${errors.identifier ? '#ef4444' : (focused === 'identifier' ? '#6C22F9' : '#e5e7eb')}`,
-                    borderRadius: 14, fontSize: 15, fontFamily: 'Tajawal, sans-serif',
-                    background: focused === 'identifier' ? '#fff' : '#f9fafb',
-                    outline: 'none', transition: 'all 0.3s',
-                    direction: 'rtl', boxSizing: 'border-box'
+                    width: '100%',
+                    border: 'none',
+                    borderBottom: `1.5px solid ${errors.identifier ? '#ef4444' : (focused === 'identifier' ? BRAND_BLUE : '#d1d5db')}`,
+                    borderRadius: 0,
+                    background: 'transparent',
+                    padding: '14px 14px 14px 44px',
+                    textAlign: 'right',
+                    direction: 'rtl',
+                    fontSize: 15.5,
+                    fontWeight: 700,
+                    color: '#111827',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    fontFamily: 'Tajawal, sans-serif',
+                    boxSizing: 'border-box'
                   }}
                 />
-                <RiUserLine size={20} color={focused === 'identifier' ? '#6C22F9' : '#9ca3af'} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', transition: 'color 0.3s' }} />
+                <User size={19} color={BRAND_BLUE} style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
               </div>
-              {errors.identifier && <div style={{ color: '#ef4444', fontSize: 13, marginTop: 6, fontWeight: 600 }}>{errors.identifier}</div>}
+              {errors.identifier && <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>⚠ {errors.identifier}</span>}
             </div>
 
             {/* Password Input */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 700, color: '#16133a' }}>كلمة المرور</label>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   type={showPass ? 'text' : 'password'}
                   value={form.password}
                   onChange={e => { setForm(p => ({ ...p, password: e.target.value })); if (errors.password) setErrors(p => ({ ...p, password: '' })); }}
                   onFocus={() => setFocused('password')}
                   onBlur={() => setFocused(null)}
-                  placeholder="أدخل كلمة المرور"
+                  placeholder="كلمة المرور"
                   style={{
-                    width: '100%', padding: '16px 16px 16px 48px',
-                    border: `2px solid ${errors.password ? '#ef4444' : (focused === 'password' ? '#6C22F9' : '#e5e7eb')}`,
-                    borderRadius: 14, fontSize: 15, fontFamily: 'Tajawal, sans-serif',
-                    background: focused === 'password' ? '#fff' : '#f9fafb',
-                    outline: 'none', transition: 'all 0.3s', boxSizing: 'border-box'
+                    width: '100%',
+                    border: 'none',
+                    borderBottom: `1.5px solid ${errors.password ? '#ef4444' : (focused === 'password' ? BRAND_BLUE : '#d1d5db')}`,
+                    borderRadius: 0,
+                    background: 'transparent',
+                    padding: '14px 14px 14px 44px',
+                    textAlign: 'right',
+                    direction: 'rtl',
+                    fontSize: 15.5,
+                    fontWeight: 700,
+                    color: '#111827',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    fontFamily: 'Tajawal, sans-serif',
+                    boxSizing: 'border-box'
                   }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  style={{
-                    position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
+                  style={{ position: 'absolute', left: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center' }}
                 >
-                  {showPass ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                  {showPass ? <EyeOff size={19} /> : <Eye size={19} />}
                 </button>
               </div>
-              {errors.password && <div style={{ color: '#ef4444', fontSize: 13, marginTop: 6, fontWeight: 600 }}>{errors.password}</div>}
+              {errors.password && <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>⚠ {errors.password}</span>}
             </div>
 
             {/* Forgot Password Link */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 28 }}>
-              <Link href="/forgot-password" style={{ color: '#6C22F9', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -10 }}>
+              <Link href="/forgot-password" style={{ color: BRAND_BLUE, fontSize: 13.5, fontWeight: 700, textDecoration: 'none' }}>
                 نسيت كلمة المرور؟
               </Link>
             </div>
 
-            {/* API Error Alert */}
-            {apiError && (
-              <div style={{
-                background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca',
-                padding: '12px 16px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                marginBottom: 20, textAlign: 'center'
-              }}>
-                ⚠️ {apiError}
-              </div>
-            )}
-
             {/* Submit Button */}
-            <motion.button
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-              type="submit" disabled={loading}
+            <button
+              type="submit"
+              disabled={loading}
               style={{
-                width: '100%', padding: '16px',
-                background: 'linear-gradient(135deg, #6C22F9 0%, #4f46e5 100%)',
-                color: '#fff', border: 'none', borderRadius: 14,
-                fontSize: 16, fontWeight: 800, fontFamily: 'Tajawal, sans-serif',
+                width: '100%',
+                background: '#7c3aed',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 12,
+                padding: '15px 20px',
+                fontSize: 16.5,
+                fontWeight: 900,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                boxShadow: '0 8px 24px rgba(108,34,249,0.35)', opacity: loading ? 0.7 : 1,
-                boxSizing: 'border-box'
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 16px rgba(124, 58, 237, 0.3)',
+                fontFamily: 'Tajawal, sans-serif',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8
               }}
             >
               {loading ? (
                 <span>جاري تسجيل الدخول...</span>
               ) : (
                 <>
-                  <RiLoginCircleLine size={22} />
+                  <LogIn size={20} />
                   <span>تسجيل الدخول</span>
                 </>
               )}
-            </motion.button>
+            </button>
           </form>
 
-          {/* Register Link Footer */}
-          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 15, color: '#6b7280' }}>
+          {/* Bottom Register Link */}
+          <p style={{ textAlign: 'center', marginTop: 32, fontSize: 14, color: '#4b5563', margin: '32px 0 0' }}>
             ليس لديك حساب بعد؟{' '}
-            <Link href="/register" style={{ color: '#6C22F9', fontWeight: 800, textDecoration: 'none' }}>
-              أنشئ حساباً جديداً مجاناً
+            <Link href="/register" style={{ color: BRAND_BLUE, fontWeight: 800, textDecoration: 'none' }}>
+              أنشئ حساباً جديداً الآن !
             </Link>
+          </p>
+
           </div>
         </motion.div>
-      </div>
 
-      <style jsx>{`
-        .auth-visual-side {
-          flex: 1;
-          position: relative;
-          display: block;
-        }
-        .auth-form-side {
-          width: 540px;
-          display: flex;
-          align-items: center;
-          justify: center;
-          padding: 40px;
-          box-sizing: border-box;
-          background: #fff;
-        }
-        .form-container {
-          width: 100%;
-          max-width: 420px;
-        }
-        @media (max-width: 1024px) {
-          .auth-visual-side {
-            display: none;
-          }
-          .auth-form-side {
-            width: 100%;
-            padding: 24px;
-          }
-        }
-      `}</style>
+        {/* LEFT SIDE (in RTL): Visual Image Card */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="login-visual-side rounded-xl lg:h-full"
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.05)',
+            background: '#ffffff',
+            minHeight: 'calc(100vh - 32px)'
+          }}
+        >
+          <Image
+            src="/hero1.webp"
+            alt="Abdelrahman Hamed - Programming & AI"
+            fill
+            style={{ objectFit: 'cover' }}
+            priority
+          />
+        </motion.div>
+
+      </div>
     </div>
   );
 }

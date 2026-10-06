@@ -7,8 +7,12 @@ const API = axios.create({
 
 API.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('adminToken');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    const match = document.cookie.match(/(?:^|;\s*)admin_token=([^;]+)/);
+    const cookieToken = match ? match[1] : null;
+    const token = cookieToken || localStorage.getItem('adminToken');
+    if (token && token !== 'local_admin_dev_token' && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   return config;
 });
@@ -17,8 +21,10 @@ API.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && typeof window !== 'undefined') {
+      document.cookie = 'admin_token=; path=/; max-age=0; SameSite=Strict;';
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
+      localStorage.removeItem('admin_user');
       window.location.href = '/admin/login';
     }
     return Promise.reject(err);
@@ -59,8 +65,8 @@ export const getReviews = (courseId: string) => API.get(`/courses/${courseId}/re
 
 export const uploadFile = (data: FormData) => API.post('/uploads', data);
 
-export const getProfile = () => API.get('/users/me');
-export const updateProfile = (data: FormData) => API.patch('/users/me', data);
+export const getProfile = () => API.get('/users/profile');
+export const updateProfile = (data: FormData | object) => API.patch('/users/profile', data);
 export const changePassword = (data: object) => API.patch('/auth/change-password', data);
 
 export default API;

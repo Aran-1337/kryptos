@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Clock, Award, User, LogOut, Menu, X, Wallet, Trophy, BarChart3, MessageSquare, Flame, ShoppingBag, BookMarked } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Clock, Award, User, LogOut, Menu, X, Wallet, Trophy, BarChart3, MessageSquare, Flame, ShoppingBag, BookMarked, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationCenter from '../components/NotificationCenter';
 import ThemeToggle from '../components/ThemeToggle';
@@ -11,8 +11,9 @@ import ThemeToggle from '../components/ThemeToggle';
 const sidebarLinks = [
   { href: '/dashboard', label: 'الرئيسية', icon: <LayoutDashboard size={20} /> },
   { href: '/dashboard/courses', label: 'كورساتي', icon: <BookOpen size={20} /> },
-  { href: '/courses', label: 'متجر الكورسات 🛒', icon: <ShoppingBag size={20} /> },
-  { href: '/books', label: 'الكتب والمذكرات 📦', icon: <BookMarked size={20} /> },
+  { href: '/dashboard/orders', label: 'طلباتي 📋', icon: <Receipt size={20} /> },
+  { href: '/dashboard/store', label: 'متجر الكورسات 🛒', icon: <ShoppingBag size={20} /> },
+  { href: '/dashboard/books', label: 'الكتب والمذكرات 📦', icon: <BookMarked size={20} /> },
   { href: '/dashboard/quests', label: 'التحديات والمكافآت 🎯', icon: <Flame size={20} /> },
   { href: '/dashboard/support', label: 'اسأل المدرس 💬', icon: <MessageSquare size={20} /> },
   { href: '/dashboard/report', label: 'التقرير الأسبوعي 📊', icon: <BarChart3 size={20} /> },
@@ -29,6 +30,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mounted, setMounted] = useState(false);
   const [sidebarLogo, setSidebarLogo] = useState('/Logo-cropped.png');
   const [walletBalance, setWalletBalance] = useState(450);
+  const [studentName, setStudentName] = useState('أحمد محمود');
+  const [studentGrade, setStudentGrade] = useState('الصف الأول الثانوي');
+  const [avatarInitial, setAvatarInitial] = useState('أ');
 
   const loadSidebarLogo = () => {
     try {
@@ -47,12 +51,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch {}
   };
 
+  const loadStudentProfile = () => {
+    try {
+      const saved = localStorage.getItem('student_profile_info');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.name && parsed.name.trim()) {
+          setStudentName(parsed.name.trim());
+          setAvatarInitial(parsed.name.trim().charAt(0));
+        }
+        if (parsed.grade && parsed.grade.trim()) {
+          setStudentGrade(parsed.grade.trim());
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     setMounted(true);
     loadSidebarLogo();
     loadWallet();
+    loadStudentProfile();
     window.addEventListener('brand_settings_updated', loadSidebarLogo);
-    return () => window.removeEventListener('brand_settings_updated', loadSidebarLogo);
+    window.addEventListener('student_profile_updated', loadStudentProfile);
+    window.addEventListener('storage', loadStudentProfile);
+    return () => {
+      window.removeEventListener('brand_settings_updated', loadSidebarLogo);
+      window.removeEventListener('student_profile_updated', loadStudentProfile);
+      window.removeEventListener('storage', loadStudentProfile);
+    };
   }, []);
 
   const SidebarContent = () => (
@@ -151,7 +178,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-              أهلاً بك، طالب متميز 👋
+              أهلاً بك، {studentName.split(' ')[0] || studentName} 👋
             </h2>
           </div>
 
@@ -172,15 +199,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NotificationCenter />
             <ThemeToggle />
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingRight: 16, borderRight: '1px solid var(--border)' }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#6C22F9', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-                ط
+            <Link href="/dashboard/profile" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingRight: 16, borderRight: '1px solid var(--border)', cursor: 'pointer' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#6C22F9', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>
+                  {avatarInitial}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-main)' }}>{studentName}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{studentGrade}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-main)' }}>طالب متميز</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>الصف الأول الثانوي</span>
-              </div>
-            </div>
+            </Link>
           </div>
         </header>
 

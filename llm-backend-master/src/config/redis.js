@@ -33,9 +33,22 @@ const safeRedis = new Proxy({}, {
   get: (_, prop) => async () => null,
 });
 
-module.exports = {
+const clientWrapper = {
   init,
   get redis() { return redis || safeRedis; },
   get bullmqConnection() { return bullmqConnection; },
   get redisAvailable() { return redisAvailable; },
 };
+
+module.exports = new Proxy(clientWrapper, {
+  get(target, prop) {
+    if (prop in target) {
+      return target[prop];
+    }
+    const client = target.redis;
+    if (typeof client[prop] === 'function') {
+      return client[prop].bind(client);
+    }
+    return client[prop];
+  },
+});

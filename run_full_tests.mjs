@@ -56,8 +56,8 @@ async function runTests() {
     }
 
     // Step 1.2: Access secret gate to unlock
-    console.log('Accessing http://localhost:3000/secret-gate?key=mnasa2025...');
-    await page1.goto('http://localhost:3000/secret-gate?key=mnasa2025', { waitUntil: 'networkidle2', timeout: 15000 });
+    console.log('Accessing http://localhost:3000/secret-gate?key=devaran...');
+    await page1.goto('http://localhost:3000/secret-gate?key=devaran', { waitUntil: 'networkidle2', timeout: 15000 });
     await new Promise(r => setTimeout(r, 1500));
     const ss2 = await takeScreenshot(page1, '02_secret_gate_redirect');
 

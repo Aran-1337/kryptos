@@ -5,13 +5,27 @@ const catchAsync = require('../../utils/catchAsync');
 const { sendResponse } = require('../../utils/response');
 const { protect, restrictTo } = require('../../middlewares/auth.middleware');
 const AppError = require('../../utils/AppError');
-const { uploadImage, uploadPDF, uploadAny } = require('../../middlewares/upload.middleware');
+const { uploadImage, uploadPDF, verifyMagicBytes } = require('../../middlewares/upload.middleware');
 const { paginate, paginateResponse } = require('../../helpers/pagination');
+const { bookIdParamValidator, createBookValidator } = require('./book.validator');
+const { uploadLimiter, searchLimiter } = require('../../middlewares/rateLimiter.middleware');
 
-router.get('/', catchAsync(async (req, res) => {
+const verifyBookOwnership = catchAsync(async (req, res, next) => {
+  const book = await Book.findById(req.params.id);
+  if (!book) throw new AppError('الكتاب غير موجود', 404);
+  if (req.user.role !== 'admin' && book.instructor.toString() !== req.user._id.toString()) {
+    throw new AppError('ليس لديك صلاحية لتعديل هذا الكتاب', 403);
+  }
+  req.book = book;
+  next();
+});
+
+router.get('/', searchLimiter, catchAsync(async (req, res) => {
   const { page, limit, skip } = paginate(req.query);
   const filter = { isPublished: true };
-  if (req.query.category) filter.category = req.query.category;
+  if (req.query.category && typeof req.query.category === 'string') {
+    filter.category = req.query.category.trim();
+  }
   const [books, total] = await Promise.all([
     Book.find(filter).select('-pdf').skip(skip).limit(limit).sort({ createdAt: -1 }),
     Book.countDocuments(filter),
@@ -19,10 +33,10 @@ router.get('/', catchAsync(async (req, res) => {
   sendResponse(res, 200, paginateResponse(books, total, page, limit));
 }));
 
-router.get('/:id/download', protect, catchAsync(async (req, res) => {
+router.get('/:id/download', bookIdParamValidator, protect, catchAsync(async (req, res) => {
   const book = await Book.findById(req.params.id).select('+pdf.publicId');
   if (!book) throw new AppError('الكتاب غير موجود', 404);
-  if (!book.isFree && req.user.role === 'student') {
+  if (!book.isFree && req.user.role !== 'admin' && book.instructor.toString() !== req.user._id.toString()) {
     // Check if user purchased the book
     const Order = require('../orders/order.model');
     const hasPurchased = await Order.findOne({
@@ -33,6 +47,10 @@ router.get('/:id/download', protect, catchAsync(async (req, res) => {
     if (!hasPurchased) throw new AppError('يجب شراء الكتاب أولاً', 403);
   }
 
+  if (!book.pdf?.publicId) {
+    throw new AppError('الملف غير متاح للتحميل حالياً', 404);
+  }
+
   const signedUrl = generateSignedUrl(book.pdf.publicId, 'raw', 3600);
   await Book.findByIdAndUpdate(req.params.id, { $inc: { totalDownloads: 1 } });
   sendResponse(res, 200, { url: signedUrl, expiresIn: 3600 });
@@ -40,33 +58,110 @@ router.get('/:id/download', protect, catchAsync(async (req, res) => {
 
 router.use(protect, restrictTo('admin', 'instructor'));
 
-router.post('/', catchAsync(async (req, res) => {
-  const book = await Book.create({ ...req.body, instructor: req.user._id });
+router.post('/', createBookValidator, catchAsync(async (req, res) => {
+  const allowed = ['title', 'description', 'price', 'isFree', 'category', 'author', 'grade', 'subject'];
+  const cleanData = {};
+  for (const field of allowed) {
+    if (req.body[field] !== undefined) cleanData[field] = req.body[field];
+  }
+  const book = await Book.create({ ...cleanData, instructor: req.user._id, isPublished: false, totalDownloads: 0 });
   sendResponse(res, 201, { book }, 'تم إنشاء الكتاب بنجاح');
 }));
 
-router.patch('/:id/cover', uploadImage.single('cover'), catchAsync(async (req, res) => {
-  if (!req.file) return res.status(400).json({ status: 'fail', message: 'يرجى رفع صورة' });
-  const result = await uploadToCloudinary(req.file.buffer, { folder: 'books/covers' });
-  const book = await Book.findByIdAndUpdate(req.params.id, {
-    coverImage: { publicId: result.public_id, url: result.secure_url },
-  }, { new: true });
-  sendResponse(res, 200, { book }, 'تم رفع صورة الغلاف بنجاح');
-}));
+// Pre-upload check: verify book exists and belongs to instructor BEFORE running Multer
+router.patch(
+  '/:id/cover',
+  bookIdParamValidator,
+  verifyBookOwnership,
+  uploadLimiter,
+  uploadImage.single('cover'),
+  verifyMagicBytes('image'),
+  catchAsync(async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: 'fail', message: 'يرجى رفع صورة' });
 
-router.patch('/:id/pdf', uploadPDF.single('pdf'), catchAsync(async (req, res) => {
-  if (!req.file) return res.status(400).json({ status: 'fail', message: 'يرجى رفع ملف PDF' });
-  const result = await uploadToCloudinary(req.file.buffer, {
-    folder: 'books/pdfs',
-    resource_type: 'raw',
-    type: 'authenticated',
-  });
-  const book = await Book.findByIdAndUpdate(req.params.id, {
-    'pdf.publicId': result.public_id,
-    'pdf.secureUrl': result.secure_url,
-    'pdf.size': result.bytes,
-  }, { new: true });
-  sendResponse(res, 200, { book }, 'تم رفع ملف PDF بنجاح');
-}));
+    const result = await uploadToCloudinary(req.file.buffer, { folder: 'books/covers' });
+    const oldPublicId = req.book.coverImage?.publicId;
+
+    const book = await Book.findByIdAndUpdate(
+      req.params.id,
+      { coverImage: { publicId: result.public_id, url: result.secure_url } },
+      { new: true }
+    );
+
+    // Delete old file if present
+    if (oldPublicId) {
+      await deleteFromCloudinary(oldPublicId, 'image').catch(() => {});
+    }
+
+    sendResponse(res, 200, { book }, 'تم رفع صورة الغلاف بنجاح');
+  })
+);
+
+router.patch(
+  '/:id/pdf',
+  bookIdParamValidator,
+  verifyBookOwnership,
+  uploadLimiter,
+  uploadPDF.single('pdf'),
+  verifyMagicBytes('pdf'),
+  catchAsync(async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: 'fail', message: 'يرجى رفع ملف PDF' });
+
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: 'books/pdfs',
+      resource_type: 'raw',
+      type: 'authenticated',
+    });
+    const oldPublicId = req.book.pdf?.publicId;
+
+    const book = await Book.findByIdAndUpdate(
+      req.params.id,
+      {
+        'pdf.publicId': result.public_id,
+        'pdf.secureUrl': result.secure_url,
+        'pdf.size': result.bytes,
+      },
+      { new: true }
+    );
+
+    // Delete old PDF from Cloudinary
+    if (oldPublicId) {
+      await deleteFromCloudinary(oldPublicId, 'raw').catch(() => {});
+    }
+
+    sendResponse(res, 200, { book }, 'تم رفع ملف PDF بنجاح');
+  })
+);
+
+router.patch(
+  '/:id',
+  bookIdParamValidator,
+  verifyBookOwnership,
+  catchAsync(async (req, res) => {
+    const allowed = ['title', 'description', 'price', 'isFree', 'category', 'author', 'grade', 'subject'];
+    const cleanData = {};
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) cleanData[field] = req.body[field];
+    }
+    const book = await Book.findByIdAndUpdate(req.params.id, cleanData, { new: true, runValidators: true });
+    sendResponse(res, 200, { book }, 'تم تحديث الكتاب بنجاح');
+  })
+);
+
+router.delete(
+  '/:id',
+  bookIdParamValidator,
+  verifyBookOwnership,
+  catchAsync(async (req, res) => {
+    if (req.book.coverImage?.publicId) {
+      await deleteFromCloudinary(req.book.coverImage.publicId, 'image').catch(() => {});
+    }
+    if (req.book.pdf?.publicId) {
+      await deleteFromCloudinary(req.book.pdf.publicId, 'raw').catch(() => {});
+    }
+    await Book.findByIdAndDelete(req.params.id);
+    sendResponse(res, 200, {}, 'تم حذف الكتاب بنجاح');
+  })
+);
 
 module.exports = router;

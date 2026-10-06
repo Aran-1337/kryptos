@@ -11,8 +11,8 @@ export interface AcademicGrade {
 export const defaultGrades: AcademicGrade[] = [
   {
     id: 'g1',
-    name: 'أولى ثانوي',
-    subtitle: 'Programming & AI من الصفر',
+    name: 'الصف الأول الثانوي',
+    subtitle: 'أولى ثانوي 🎓',
     desc: 'هنساعدك تفهم Programming & AI من الأساس، وتتعامل مع مفاهيم التكنولوجيا والبرمجة بطريقة سهلة وعملية، عشان تدخل تانية ثانوي وأنت سابق بخطوة.',
     img: '/th1.webp',
     href: '/courses?grade=1',
@@ -20,8 +20,8 @@ export const defaultGrades: AcademicGrade[] = [
   },
   {
     id: 'g2',
-    name: 'ثانية ثانوي',
-    subtitle: 'تعمّق وتميّز في عالم التقنية',
+    name: 'الصف الثاني الثانوي',
+    subtitle: 'ثانية ثانوي 🎓',
     desc: 'هنبني على اللي اتعلمته في أولى ثانوي ونوسّع مداركك في الـ AI والبرمجة المتقدمة، مع مشاريع عملية حقيقية تخليك جاهز لأي تحدي قادم.',
     img: '/th2.webp',
     href: '/courses?grade=2',
@@ -29,8 +29,8 @@ export const defaultGrades: AcademicGrade[] = [
   },
   {
     id: 'g3',
-    name: 'ثالثة ثانوي',
-    subtitle: 'المرحلة النهائية والتحدي الأكبر',
+    name: 'الصف الثالث الثانوي',
+    subtitle: 'ثالثة ثانوي 🎓',
     desc: 'إعداد واحتراف شامل لأعلى تقنيات البرمجة والذكاء الاصطناعي والاستعداد للجامعة وسوق العمل.',
     img: '/th2.webp',
     href: '/courses?grade=3',
@@ -38,12 +38,12 @@ export const defaultGrades: AcademicGrade[] = [
   },
   {
     id: 'g4',
-    name: 'تأسيس',
-    subtitle: 'مبادئ التفكير المنطقي والبرمجة',
+    name: 'تأسيس البرمجة والـ AI',
+    subtitle: 'تأسيس من الصفر 🚀',
     desc: 'كورس تأسيسي مبسط للطلاب من كافة الأعمار والمراحل لتعلم الأساسيات بطريقة شيقة وممتعة.',
     img: '/th1.webp',
     href: '/courses?grade=0',
-    active: true,
+    active: false,
   },
 ];
 

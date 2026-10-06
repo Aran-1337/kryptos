@@ -45,31 +45,31 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.max,
-  message: { status: 'fail', message: 'طلبات كثيرة جداً. يرجى المحاولة لاحقاً' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api', limiter);
+if (config.trustProxy) {
+  app.set('trust proxy', 1);
+} else {
+  app.set('trust proxy', false);
+}
 
-// Stricter limit for auth routes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { status: 'fail', message: 'محاولات كثيرة جداً. يرجى المحاولة بعد 15 دقيقة' },
-});
-app.use('/api/v1/auth/login', authLimiter);
-app.use('/api/v1/auth/register', authLimiter);
+// Rate limiting (Baseline global protection on /api)
+const { globalLimiter } = require('./middlewares/rateLimiter.middleware');
+app.use('/api', globalLimiter);
 
 // ─── General Middlewares ─────────────────────────────────────────────────────
 app.use(compression());
-app.use(express.json({ limit: '10kb' }));
+app.use(
+  express.json({
+    limit: '10kb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+const { securitySanitizer } = require('./middlewares/sanitizer.middleware');
 app.use(cookieParser());
-app.use(mongoSanitize()); // Prevent NoSQL injection
+app.use(securitySanitizer); // Prevent operator injection & prototype pollution
+app.use(mongoSanitize()); // Strip NoSQL injection operators as second defense line
 
 if (config.env === 'development') {
   app.use(morgan('dev'));
@@ -80,7 +80,7 @@ app.all('/api/ext/*', (req, res) => res.status(200).json({}));
 app.use('/api/v1', routes);
 
 // Health check
-app.get('/health', (req, res) => res.json({ status: 'ok', env: config.env }));
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // 404 handler
 app.all('*', (req, res) => {

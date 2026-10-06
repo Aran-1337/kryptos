@@ -7,15 +7,22 @@ const {
   resetPasswordValidator, changePasswordValidator,
 } = require('./auth.validator');
 
-router.post('/check-availability', authController.checkAvailability);
-router.post('/register', registerValidator, validate, authController.register);
-router.post('/login', loginValidator, validate, authController.login);
+const {
+  authLimiter,
+  passwordResetLimiter,
+  otpLimiter,
+  availabilityLimiter,
+} = require('../../middlewares/rateLimiter.middleware');
+
+router.post('/check-availability', availabilityLimiter, authController.checkAvailability);
+router.post('/register', authLimiter, registerValidator, validate, authController.register);
+router.post('/login', authLimiter, loginValidator, validate, authController.login);
 router.post('/logout', protect, authController.logout);
 router.post('/refresh-token', authController.refreshToken);
-router.get('/verify-email/:token', authController.verifyEmail);
-router.post('/resend-verification', authController.resendVerification);
-router.post('/forgot-password', forgotPasswordValidator, validate, authController.forgotPassword);
-router.patch('/reset-password/:token', resetPasswordValidator, validate, authController.resetPassword);
-router.patch('/change-password', protect, changePasswordValidator, validate, authController.changePassword);
+router.get('/verify-email/:token', otpLimiter, authController.verifyEmail);
+router.post('/resend-verification', otpLimiter, authController.resendVerification);
+router.post('/forgot-password', passwordResetLimiter, forgotPasswordValidator, validate, authController.forgotPassword);
+router.patch('/reset-password/:token', passwordResetLimiter, resetPasswordValidator, validate, authController.resetPassword);
+router.patch('/change-password', protect, passwordResetLimiter, changePasswordValidator, validate, authController.changePassword);
 
 module.exports = router;

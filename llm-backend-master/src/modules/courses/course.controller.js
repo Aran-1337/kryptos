@@ -44,4 +44,9 @@ const publishCourse = catchAsync(async (req, res) => {
   sendResponse(res, 200, { course }, 'تم نشر الكورس بنجاح');
 });
 
-module.exports = { createCourse, getCourses, getCourse, updateCourse, deleteCourse, uploadThumbnail, uploadPreviewVideo, publishCourse };
+const getManageCourses = catchAsync(async (req, res) => {
+  const result = await courseService.getManageCourses(req.query, req.user._id, req.user.role);
+  sendResponse(res, 200, result);
+});
+
+module.exports = { createCourse, getCourses, getCourse, updateCourse, deleteCourse, uploadThumbnail, uploadPreviewVideo, publishCourse, getManageCourses };

@@ -29,10 +29,11 @@ const login = catchAsync(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
-  sendResponse(res, 200, { user: member, accessToken }, 'تم تسجيل الدخول بنجاح');
+  sendResponse(res, 200, { user: member, accessToken, refreshToken }, 'تم تسجيل الدخول بنجاح');
 });
 
 const getAll = catchAsync(async (req, res) => {
@@ -41,11 +42,17 @@ const getAll = catchAsync(async (req, res) => {
 });
 
 const updatePermissions = catchAsync(async (req, res) => {
+  if (req.user.role !== 'admin' && req.user._id.toString() === req.params.id.toString()) {
+    return res.status(403).json({ status: 'fail', message: 'لا يمكنك تعديل صلاحيات حسابك الخاص' });
+  }
   const member = await teamService.updatePermissions(req.params.id, req.body.permissions);
   sendResponse(res, 200, { member }, 'تم تحديث الصلاحيات بنجاح');
 });
 
 const deleteMember = catchAsync(async (req, res) => {
+  if (req.user._id.toString() === req.params.id.toString()) {
+    return res.status(400).json({ status: 'fail', message: 'لا يمكنك حذف حسابك الخاص' });
+  }
   await teamService.deleteMember(req.params.id);
   sendResponse(res, 200, {}, 'تم حذف العضو بنجاح');
 });

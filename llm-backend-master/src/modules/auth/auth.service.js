@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const redisConfig = require('../../config/redis');
 const config = require('../../config');
 const User = require('../users/user.model');
+const TeamMember = require('../team/team.model');
 
 const checkFieldExists = (field, value) => User.findOne({ [field]: value }).select('_id');
 
@@ -56,41 +57,116 @@ const login = async ({ phone, email, password, deviceInfo }) => {
     existingDevice.ip = ip;
   }
 
-  const accessToken = generateAccessToken(user._id, user.role);
-  const refreshToken = generateRefreshToken(user._id);
+  const accessToken = generateAccessToken(user._id, user.role, { type: 'user' });
+  const refreshToken = generateRefreshToken(user._id, { type: 'user' });
 
   user.refreshTokens = [...(user.refreshTokens || []).slice(-4), refreshToken];
+  user.markModified('refreshTokens');
   await user.save({ validateBeforeSave: false });
 
   return { user, accessToken, refreshToken };
 };
 
-const logout = async (userId, token) => {
-  try {
-    const decoded = require('jsonwebtoken').decode(token);
-    const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-    if (ttl > 0) await redisConfig.redis.setex(`blacklist:${token}`, ttl, '1');
-  } catch (_) {}
-  await User.findByIdAndUpdate(userId, { $pull: { refreshTokens: token } });
+const logout = async (userId, accessToken, refreshToken, identityType) => {
+  // 1. Blacklist access token in Redis if active and Redis available
+  if (accessToken) {
+    try {
+      const decoded = require('jsonwebtoken').decode(accessToken);
+      if (decoded?.exp) {
+        const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+        if (ttl > 0) {
+          await redisConfig.redis.setex(`blacklist:${accessToken}`, ttl, '1');
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 2. Authoritative server revocation: pull the refresh token from persistent database storage
+  if (refreshToken) {
+    if (identityType === 'team_member') {
+      await TeamMember.findByIdAndUpdate(userId, { $pull: { refreshTokens: refreshToken } });
+    } else if (identityType === 'user') {
+      await User.findByIdAndUpdate(userId, { $pull: { refreshTokens: refreshToken } });
+    } else {
+      await Promise.all([
+        User.findByIdAndUpdate(userId, { $pull: { refreshTokens: refreshToken } }),
+        TeamMember.findByIdAndUpdate(userId, { $pull: { refreshTokens: refreshToken } }),
+      ]);
+    }
+  } else {
+    // If no specific refreshToken provided, clear all refresh tokens for this identity
+    if (identityType === 'team_member') {
+      await TeamMember.findByIdAndUpdate(userId, { $set: { refreshTokens: [] } });
+    } else {
+      await User.findByIdAndUpdate(userId, { $set: { refreshTokens: [] } });
+    }
+  }
 };
 
 const refreshAccessToken = async (refreshToken) => {
-  const decoded = verifyRefreshToken(refreshToken);
-  const user = await authRepo.findById(decoded.id);
-
-  if (!user || !user.refreshTokens?.includes(refreshToken)) {
-    throw new AppError('رمز التحديث غير صالح', 401);
+  let decoded;
+  try {
+    decoded = verifyRefreshToken(refreshToken);
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      throw new AppError('انتهت صلاحية رمز التحديث. يرجى تسجيل الدخول مجدداً', 401);
+    }
+    throw new AppError('رمز التحديث غير صالح. يرجى تسجيل الدخول مجدداً', 401);
   }
 
-  const newAccessToken = generateAccessToken(user._id, user.role);
-  const newRefreshToken = generateRefreshToken(user._id);
+  let identity = null;
+  let identityType = null;
+
+  if (decoded.type === 'team_member') {
+    identity = await TeamMember.findById(decoded.id).select('+refreshTokens');
+    identityType = 'team_member';
+  } else if (decoded.type === 'user') {
+    identity = await User.findById(decoded.id).select('+refreshTokens');
+    identityType = 'user';
+  } else {
+    // Legacy fallback
+    identity = await User.findById(decoded.id).select('+refreshTokens');
+    identityType = identity ? 'user' : null;
+    if (!identity) {
+      identity = await TeamMember.findById(decoded.id).select('+refreshTokens');
+      identityType = identity ? 'team_member' : null;
+    }
+  }
+
+  if (!identity) {
+    throw new AppError('المستخدم غير موجود', 401);
+  }
+
+  // Account status verification
+  if (identity.isBanned) {
+    throw new AppError('تم حظر هذا الحساب', 403);
+  }
+  if (!identity.isActive) {
+    throw new AppError('الحساب غير نشط', 401);
+  }
+  if (identityType === 'team_member' && !identity.isAccepted) {
+    throw new AppError('لم يتم قبول الدعوة بعد', 401);
+  }
+
+  // Server-side authoritative verification: is the refresh token in stored list?
+  if (!identity.refreshTokens || !identity.refreshTokens.includes(refreshToken)) {
+    throw new AppError('رمز التحديث غير صالح أو تم إلغاؤه', 401);
+  }
+
+  const role = identity.role || (identityType === 'team_member' ? 'assistant' : 'student');
+  const newAccessToken = generateAccessToken(identity._id, role, { type: identityType });
+  const newRefreshToken = generateRefreshToken(identity._id, { type: identityType });
 
   // Rotate refresh token
-  user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
-  user.refreshTokens.push(newRefreshToken);
-  await user.save({ validateBeforeSave: false });
+  identity.refreshTokens = (identity.refreshTokens || []).filter((t) => t !== refreshToken);
+  identity.refreshTokens.push(newRefreshToken);
+  if (identity.refreshTokens.length > 5) {
+    identity.refreshTokens = identity.refreshTokens.slice(-5);
+  }
+  identity.markModified('refreshTokens');
+  await identity.save({ validateBeforeSave: false });
 
-  return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  return { accessToken: newAccessToken, refreshToken: newRefreshToken, user: identity };
 };
 
 const verifyEmail = async (token) => {
@@ -106,23 +182,32 @@ const verifyEmail = async (token) => {
 
 const resendVerification = async (email) => {
   const user = await authRepo.findByEmail(email);
-  if (!user) throw new AppError('لا يوجد حساب بهذا البريد الإلكتروني', 404);
-  if (user.isEmailVerified) throw new AppError('البريد الإلكتروني مؤكد بالفعل', 400);
+  if (!user || user.isEmailVerified) return;
 
-  const token = await authRepo.setEmailVerificationToken(user._id);
-  const verifyUrl = `${config.clientUrl}/verify-email?token=${token}`;
-  const template = emailTemplates.verifyEmail(user.name || user.firstName, verifyUrl);
-  await sendEmail({ to: email, ...template });
+  try {
+    const token = await authRepo.setEmailVerificationToken(user._id);
+    const verifyUrl = `${config.clientUrl}/verify-email?token=${token}`;
+    const template = emailTemplates.verifyEmail(user.name || user.firstName, verifyUrl);
+    await sendEmail({ to: email, ...template });
+  } catch (err) {
+    // Log error internally without leaking to client
+    console.error('Failed to send verification email:', err.message);
+  }
 };
 
 const forgotPassword = async (email) => {
   const user = await authRepo.findByEmail(email);
-  if (!user) throw new AppError('لا يوجد حساب بهذا البريد الإلكتروني', 404);
+  if (!user) return;
 
-  const token = await authRepo.setPasswordResetToken(user._id);
-  const resetUrl = `${config.clientUrl}/reset-password?token=${token}`;
-  const template = emailTemplates.resetPassword(user.name, resetUrl);
-  await sendEmail({ to: email, ...template });
+  try {
+    const token = await authRepo.setPasswordResetToken(user._id);
+    const resetUrl = `${config.clientUrl}/reset-password?token=${token}`;
+    const template = emailTemplates.resetPassword(user.name, resetUrl);
+    await sendEmail({ to: email, ...template });
+  } catch (err) {
+    // Log error internally without leaking to client
+    console.error('Failed to send password reset email:', err.message);
+  }
 };
 
 const resetPassword = async (token, newPassword) => {

@@ -22,4 +22,17 @@ const orderSchema = new mongoose.Schema({
 orderSchema.index({ user: 1, status: 1 });
 orderSchema.index({ createdAt: -1 });
 
+orderSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  if (obj.paymentDetails && typeof obj.paymentDetails === 'object') {
+    delete obj.paymentDetails.secret;
+    delete obj.paymentDetails.apiKey;
+    delete obj.paymentDetails.apiSecret;
+    delete obj.paymentDetails.webhookSecret;
+    delete obj.paymentDetails.privateKey;
+  }
+  delete obj.__v;
+  return obj;
+};
+
 module.exports = mongoose.model('Order', orderSchema);

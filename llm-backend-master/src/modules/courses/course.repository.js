@@ -14,15 +14,23 @@ const countDocuments = (filter = {}) => Course.countDocuments(filter);
 
 const buildSearchFilter = (query) => {
   const filter = { isPublished: true };
-  if (query.search) filter.$text = { $search: query.search };
-  if (query.category) filter.category = query.category;
-  if (query.level) filter.level = query.level;
-  if (query.language) filter.language = query.language;
+  if (query.search && typeof query.search === 'string') {
+    filter.$text = { $search: query.search.trim().slice(0, 100) };
+  }
+  if (query.category && typeof query.category === 'string') {
+    filter.category = query.category.trim();
+  }
+  if (query.level && typeof query.level === 'string') {
+    filter.level = query.level.trim();
+  }
+  if (query.language && typeof query.language === 'string') {
+    filter.language = query.language.trim();
+  }
   if (query.isFree === 'true') filter.isFree = true;
   if (query.minPrice || query.maxPrice) {
     filter.price = {};
-    if (query.minPrice) filter.price.$gte = Number(query.minPrice);
-    if (query.maxPrice) filter.price.$lte = Number(query.maxPrice);
+    if (query.minPrice && !isNaN(Number(query.minPrice))) filter.price.$gte = Number(query.minPrice);
+    if (query.maxPrice && !isNaN(Number(query.maxPrice))) filter.price.$lte = Number(query.maxPrice);
   }
   return filter;
 };

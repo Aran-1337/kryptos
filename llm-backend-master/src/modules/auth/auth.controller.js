@@ -12,12 +12,12 @@ const getDeviceInfo = (req) => ({
 const checkAvailability = catchAsync(async (req, res) => {
   const { email, phone } = req.body;
   const errors = {};
-  if (email) {
-    const existing = await authService.checkFieldExists('email', email);
+  if (email && typeof email === 'string') {
+    const existing = await authService.checkFieldExists('email', email.trim().toLowerCase());
     if (existing) errors.email = 'البريد الإلكتروني مستخدم من قبل';
   }
-  if (phone) {
-    const existing = await authService.checkFieldExists('phone', phone);
+  if (phone && typeof phone === 'string') {
+    const existing = await authService.checkFieldExists('phone', phone.trim());
     if (existing) errors.phone = 'رقم الهاتف مستخدم من قبل';
   }
   sendResponse(res, 200, { errors }, '');
@@ -28,39 +28,43 @@ const register = catchAsync(async (req, res) => {
   sendResponse(res, 201, { user }, 'تم إنشاء الحساب بنجاح');
 });
 
+const getCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
 const login = catchAsync(async (req, res) => {
   const { user, accessToken, refreshToken } = await authService.login({ ...req.body, deviceInfo: getDeviceInfo(req) });
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie('refreshToken', refreshToken, getCookieOptions());
 
-  sendResponse(res, 200, { user, accessToken }, 'تم تسجيل الدخول بنجاح');
+  sendResponse(res, 200, { user, accessToken, refreshToken }, 'تم تسجيل الدخول بنجاح');
 });
 
 const logout = catchAsync(async (req, res) => {
-  await authService.logout(req.user._id, req.token);
-  res.clearCookie('refreshToken');
+  const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+  await authService.logout(req.user._id, req.token, refreshToken, req.user.identityType);
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
   sendResponse(res, 200, {}, 'تم تسجيل الخروج بنجاح');
 });
 
 const refreshToken = catchAsync(async (req, res) => {
-  const token = req.cookies.refreshToken || req.body.refreshToken;
+  const token = req.cookies?.refreshToken || req.body?.refreshToken;
   if (!token) return res.status(401).json({ status: 'fail', message: 'رمز التحديث مطلوب' });
 
   const tokens = await authService.refreshAccessToken(token);
 
-  res.cookie('refreshToken', tokens.refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie('refreshToken', tokens.refreshToken, getCookieOptions());
 
-  sendResponse(res, 200, { accessToken: tokens.accessToken }, 'تم تجديد الرمز بنجاح');
+  sendResponse(res, 200, { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }, 'تم تجديد الرمز بنجاح');
 });
 
 const verifyEmail = catchAsync(async (req, res) => {
